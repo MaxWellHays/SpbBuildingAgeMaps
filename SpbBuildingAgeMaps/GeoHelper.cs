@@ -1,26 +1,39 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Web;
 using System.Xml.Linq;
 using GeoAPI.Geometries;
+using NetTopologySuite.Features;
+using NetTopologySuite.Geometries;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace SpbBuildingAgeMaps
 {
   static class GeoHelper
   {
-    public static Coordinate ParseCoord(string coord)
+    public static Coordinate ParseCoord(string lonAndLat)
     {
-      var values = coord.Split(' ');
-      double lon, lat;
-      if (values.Length != 2
-        || !double.TryParse(values[0], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out lon)
-        || !double.TryParse(values[1], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out lat))
+      var values = lonAndLat.Split(' ');
+      if (values.Length != 2)
       {
         return null;
       }
-      return new Coordinate(lon, lat);
+      return ParseCoord(values[0], values[1]);
+    }
+
+    public static Coordinate ParseCoord(string lon, string lat)
+    {
+      double lonValue, latValue;
+      if (!double.TryParse(lon, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out lonValue)
+        || !double.TryParse(lat, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out latValue))
+      {
+        return null;
+      }
+      return new Coordinate(lonValue, latValue);
     }
 
     public static IEnumerable<string> GetYandexRequests(string rawAddress)
@@ -30,6 +43,7 @@ namespace SpbBuildingAgeMaps
         yield return string.Format("https://geocode-maps.yandex.ru/1.x/?geocode={0}", HttpUtility.UrlEncode(address));
       }
     }
+
     public static Coordinate GetYandexCoordOfAddress(string rawAddress)
     {
       foreach (string request in GetYandexRequests(rawAddress))
@@ -43,6 +57,7 @@ namespace SpbBuildingAgeMaps
             return ParseCoord(geoObject.Descendants("pos").First().Value);
           }
         }
+        Debug.WriteLine("Requenst {0} not found a building", request);
       }
       return null;
     }
@@ -87,11 +102,11 @@ namespace SpbBuildingAgeMaps
 
       public static IGeometry GetMultypoligonOfRelation(int relationId, IGeometryFactory geometryFactory)
       {
-        string relationLink = string.Format("https://www.openstreetmap.org/api/0.6/relation/{0}", relationId);
-        XDocument relationObject = XmlHelper.LoadXDocument(relationLink);
-        IEnumerable<int> wayIndexes = relationObject.Descendants("member").Where(element => element.Attribute("type").Value.Equals("way", StringComparison.CurrentCultureIgnoreCase))
-          .Attributes("ref").Select(attribute => int.Parse(attribute.Value)).ToArray();
-        return geometryFactory.CreateMultiPolygon(wayIndexes.Select(wayId => GetPoligonOfWay(wayId, geometryFactory)).ToArray());
+        string relationLink = string.Format("http://polygons.openstreetmap.fr/get_geojson.py?id={0}", relationId);
+        string geoJsonPoligon = WebHelper.DownloadString(relationLink).Replace('"', '\'');
+        GeometryCollection geometryCollection = JsonConvert.DeserializeObject<GeometryCollection>(geoJsonPoligon,
+            new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), StringEscapeHandling = StringEscapeHandling.EscapeHtml });
+        return geometryCollection.First(geometry => geometry is IMultiPolygon);
       }
     }
 
@@ -115,8 +130,8 @@ namespace SpbBuildingAgeMaps
     public static string GetNominatimRequest(Coordinate coord)
     {
       string nominatimRequest =
-        string.Format("http://nominatim.openstreetmap.org/reverse.php?format=xml&lat={0}&lon={1}&zoom=18", coord.Y,
-          coord.X);
+        string.Format("http://nominatim.openstreetmap.org/reverse.php?format=xml&lat={0}&lon={1}&zoom=18", coord.Y.ToString(CultureInfo.InvariantCulture),
+          coord.X.ToString(CultureInfo.InvariantCulture));
       return nominatimRequest;
     }
   }

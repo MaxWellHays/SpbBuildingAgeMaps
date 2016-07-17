@@ -22,6 +22,12 @@ namespace SpbBuildingAgeMaps
       this.buildYear = buildYear;
     }
 
+    public Building(string rawAddress, int buildYear, Coordinate coord)
+      : this(0, rawAddress, null, null, buildYear)
+    {
+      this.coord = coord;
+    }
+
     public static Building Parse(string paramsLine)
     {
       var buildingParams = paramsLine.Split('\t');
@@ -33,7 +39,7 @@ namespace SpbBuildingAgeMaps
       return new Building(index, buildingParams[1], buildingParams[2], buildingParams[3], buildYear);
     }
 
-    private GeoHelper.OsmObject OsmObject
+    public GeoHelper.OsmObject OsmObject
     {
       get
       {
@@ -42,7 +48,7 @@ namespace SpbBuildingAgeMaps
           Coordinate coord = Coords;
           if (coord != null)
           {
-            return GeoHelper.OsmObject.GetByCoord(coord);
+            osmObject = GeoHelper.OsmObject.GetByCoord(coord);
           }
         }
         return osmObject;
