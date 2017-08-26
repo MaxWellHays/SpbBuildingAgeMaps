@@ -38,16 +38,55 @@ namespace SpbBuildingAgeMaps
       return true;
     }
 
+    public static async Task<int> InsertBuildingsIntoTableAsync(SQLiteConnection connection, IEnumerable<Building> buildings)
+    {
+      int insertedItemCount = 0;
+      using (SQLiteTransaction transaction = connection.BeginTransaction())
+      {
+        using (var command = new SQLiteCommand("INSERT INTO Building (Id, Address, Type, District, BuildYear) VALUES (@Id, @Address, @Type, @District, @BuildYear)", connection))
+        {
+          command.Transaction = transaction;
+          try
+          {
+            foreach (var building in buildings)
+            {
+              insertedItemCount++;
+              command.Parameters.AddWithValue("@Id", building.Id);
+              command.Parameters.AddWithValue("@Address", building.RawAddress);
+              command.Parameters.AddWithValue("@Type", building.BuildingType);
+              command.Parameters.AddWithValue("@District", building.District);
+              command.Parameters.AddWithValue("@BuildYear", building.BuildYear);
+
+              if (await command.ExecuteNonQueryAsync().ConfigureAwait(false) != 1)
+              {
+                throw new InvalidProgramException();
+              }
+            }
+            transaction.Commit();
+          }
+          catch (SQLiteException ex)
+          {
+            transaction.Rollback();
+            Console.WriteLine(ex);
+            throw;
+          }
+        }
+      }
+      return insertedItemCount;
+    }
+
     public static async Task InsertBuildingIntoTableAsync(SQLiteConnection connection, Building building)
     {
-      SQLiteCommand insertSQL = new SQLiteCommand("INSERT INTO Building (Id, Address, Type, District, BuildYear) VALUES (@Id, @Address, @Type, @District, @BuildYear)", connection);
-      insertSQL.Parameters.AddWithValue("@Id", building.Id);
-      insertSQL.Parameters.AddWithValue("@Address", building.RawAddress);
-      insertSQL.Parameters.AddWithValue("@Type", building.BuildingType);
-      insertSQL.Parameters.AddWithValue("@District", building.District);
-      insertSQL.Parameters.AddWithValue("@BuildYear", building.BuildYear);
-      var queryText = insertSQL.CommandText;
-      var result = await insertSQL.ExecuteNonQueryAsync().ConfigureAwait(false);
+      using (SQLiteCommand command = new SQLiteCommand("INSERT INTO Building (Id, Address, Type, District, BuildYear) VALUES (@Id, @Address, @Type, @District, @BuildYear)", connection))
+      {
+        command.Parameters.AddWithValue("@Id", building.Id);
+        command.Parameters.AddWithValue("@Address", building.RawAddress);
+        command.Parameters.AddWithValue("@Type", building.BuildingType);
+        command.Parameters.AddWithValue("@District", building.District);
+        command.Parameters.AddWithValue("@BuildYear", building.BuildYear);
+        var queryText = command.CommandText;
+        var result = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+      }
     }
 
     public static async Task<int> GetBuildingCountAsync(SQLiteConnection connection)

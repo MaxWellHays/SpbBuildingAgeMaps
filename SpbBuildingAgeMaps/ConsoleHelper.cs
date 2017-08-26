@@ -22,5 +22,11 @@ namespace SpbBuildingAgeMaps
       Console.Write("Progress {0}/{1}", processed, fullCount);
       Console.CursorLeft = 0;
     }
+
+    public static void WriteProgress(int processed)
+    {
+      Console.Write("Progress {0}", processed);
+      Console.CursorLeft = 0;
+    }
   }
 }

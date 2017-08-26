@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GeoAPI.Geometries;
 using LumenWorks.Framework.IO.Csv;
+using MoreLinq;
 using NetTopologySuite;
 using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
@@ -79,12 +80,13 @@ namespace SpbBuildingAgeMaps
 
     private static async Task<int> FillBuildingTableAsync(SQLiteConnection connection)
     {
-      int counter = 0;
+      var timeDeterrenter = new TimeDeterrenter(ConsoleHelper.WriteProgress, TimeSpan.FromMilliseconds(200));
       var tasks = GetBuildingsFromResources(Resources.SpbBuildingsAge)
-        .Select(building => SQLiteHelper.InsertBuildingIntoTableAsync(connection, building))
-        .Select(task => task.ContinueWith(t => Interlocked.Increment(ref counter)));
+        .Batch(500)
+        .Select(buildings => SQLiteHelper.InsertBuildingsIntoTableAsync(connection, buildings))
+        .Select(task => task.ContinueWith(t => timeDeterrenter.PerformAttempt(t.Result)));
       await Task.WhenAll(tasks).ConfigureAwait(false);
-      return counter;
+      return timeDeterrenter.TotalAttemptsCount;
     }
 
     private static void SaveReverseGeocodingResult()

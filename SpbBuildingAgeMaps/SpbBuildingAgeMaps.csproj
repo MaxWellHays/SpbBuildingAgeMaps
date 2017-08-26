@@ -103,6 +103,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="SQLiteHelper.cs" />
+    <Compile Include="TimeDeterrenter.cs" />
     <Compile Include="WebHelper.cs" />
     <Compile Include="XmlHelper.cs" />
   </ItemGroup>
