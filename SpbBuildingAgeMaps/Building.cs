@@ -5,21 +5,22 @@ namespace SpbBuildingAgeMaps
 {
   class Building
   {
-    public readonly int index;
-    public readonly string rawAddress;
-    private string type;
-    private string district;
-    public readonly int buildYear;
+    public readonly int Id;
+    public readonly string RawAddress;
+    private string BuildingType;
+    private string District;
+    public readonly int BuildYear;
+
     private Coordinate coord;
     private GeoHelper.OsmObject osmObject;
 
-    private Building(int index, string rawAddress, string type, string district, int buildYear)
+    private Building(int id, string rawAddress, string buildingType, string district, int buildYear)
     {
-      this.index = index;
-      this.rawAddress = rawAddress;
-      this.type = type;
-      this.district = district;
-      this.buildYear = buildYear;
+      this.Id = id;
+      this.RawAddress = rawAddress;
+      this.BuildingType = buildingType;
+      this.District = district;
+      this.BuildYear = buildYear;
     }
 
     public Building(string rawAddress, int buildYear, Coordinate coord)
@@ -56,7 +57,7 @@ namespace SpbBuildingAgeMaps
     }
 
     public Coordinate Coords =>
-      coord ?? (coord = GeoHelper.GetYandexCoordOfAddress(rawAddress));
+      coord ?? (coord = GeoHelper.GetYandexCoordOfAddress(RawAddress));
 
     public IGeometry GetPoligone(IGeometryFactory geometryFactory)
     {

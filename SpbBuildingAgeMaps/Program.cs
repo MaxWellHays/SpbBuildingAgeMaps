@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
 using GeoAPI.Geometries;
 using LumenWorks.Framework.IO.Csv;
 using NetTopologySuite;
@@ -22,7 +24,12 @@ namespace SpbBuildingAgeMaps
     static void Main()
     {
       Thread.CurrentThread.CurrentCulture = new CultureInfo("en-us");
-      //SaveReverseGeocodingResult();
+
+      CreateAndFillBuldingTableIfNecessary().Wait();
+
+      return;
+
+      SaveReverseGeocodingResult();
       string geoJsonText;
       using (WebClient client = new WebClient())
       {
@@ -48,6 +55,23 @@ namespace SpbBuildingAgeMaps
       }
     }
 
+    private static async Task CreateAndFillBuldingTableIfNecessary()
+    {
+      using (var connection = await SQLiteHelper.GetAndOpenConnetionAsync().ConfigureAwait(false))
+      {
+        var tableExist = await SQLiteHelper.IsTableExistAsync(connection, "Building").ConfigureAwait(false);
+
+        if (!tableExist)
+        {
+          Console.WriteLine("Table \"Building\" does not exist");
+          return;
+        }
+
+        var buildingCount = await SQLiteHelper.GetBuildingCountAsync(connection).ConfigureAwait(false);
+        Console.WriteLine("Building count: {0}", buildingCount);
+      }
+    }
+
     private static void SaveReverseGeocodingResult()
     {
       List<Building> buildings = GetBuildingsFromResources(Resources.SpbBuildingsAge).ToList();
@@ -67,7 +91,7 @@ namespace SpbBuildingAgeMaps
             ConsoleHelper.ColorWriteLine(ConsoleColor.Yellow, "Skipped {0}", counter);
             continue;
           }
-          writer.WriteLine("\"{0}\",{1},{2},{3}", building.rawAddress, building.buildYear,
+          writer.WriteLine("\"{0}\",{1},{2},{3}", building.RawAddress, building.BuildYear,
             coord.X.ToString(System.Globalization.CultureInfo.InvariantCulture),
             coord.Y.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
@@ -129,8 +153,8 @@ namespace SpbBuildingAgeMaps
       {
         ConsoleHelper.WriteProgress(counter++, allCount);
         AttributesTable table = new AttributesTable();
-        table.AddAttribute("address", building.rawAddress);
-        table.AddAttribute("buildYear", building.buildYear);
+        table.AddAttribute("address", building.RawAddress);
+        table.AddAttribute("buildYear", building.BuildYear);
         IGeometry buildingPoligon = building.GetPoligone(geomFactory);
         features.Add(new Feature(buildingPoligon, table));
       }
