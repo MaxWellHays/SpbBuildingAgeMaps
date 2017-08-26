@@ -7,8 +7,8 @@ namespace SpbBuildingAgeMaps
   {
     public readonly int Id;
     public readonly string RawAddress;
-    private string BuildingType;
-    private string District;
+    public readonly string BuildingType;
+    public readonly string District;
     public readonly int BuildYear;
 
     private Coordinate coord;

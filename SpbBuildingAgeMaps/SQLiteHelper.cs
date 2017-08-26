@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SQLite;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,6 +17,7 @@ namespace SpbBuildingAgeMaps
       var projectFolder = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory).Nest(Path.GetDirectoryName, 2);
       var dataDbFilePath = Path.Combine(projectFolder, "data.db");
       var connection = new SQLiteConnection($"Data Source={dataDbFilePath};Version=3;");
+      connection.Trace += (sender, args) => { Debug.WriteLine($"SQLiteConnection handle query: {args.Statement}"); };
       await connection.OpenAsync().ConfigureAwait(false);
       return connection;
     }
@@ -33,6 +36,18 @@ namespace SpbBuildingAgeMaps
       }
 
       return true;
+    }
+
+    public static async Task InsertBuildingIntoTableAsync(SQLiteConnection connection, Building building)
+    {
+      SQLiteCommand insertSQL = new SQLiteCommand("INSERT INTO Building (Id, Address, Type, District, BuildYear) VALUES (@Id, @Address, @Type, @District, @BuildYear)", connection);
+      insertSQL.Parameters.AddWithValue("@Id", building.Id);
+      insertSQL.Parameters.AddWithValue("@Address", building.RawAddress);
+      insertSQL.Parameters.AddWithValue("@Type", building.BuildingType);
+      insertSQL.Parameters.AddWithValue("@District", building.District);
+      insertSQL.Parameters.AddWithValue("@BuildYear", building.BuildYear);
+      var queryText = insertSQL.CommandText;
+      var result = await insertSQL.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     public static async Task<int> GetBuildingCountAsync(SQLiteConnection connection)

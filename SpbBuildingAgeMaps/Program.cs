@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using GeoAPI.Geometries;
@@ -63,13 +64,27 @@ namespace SpbBuildingAgeMaps
 
         if (!tableExist)
         {
-          Console.WriteLine("Table \"Building\" does not exist");
-          return;
+          throw new NotImplementedException("Table \"Building\" does not exist");
         }
 
         var buildingCount = await SQLiteHelper.GetBuildingCountAsync(connection).ConfigureAwait(false);
-        Console.WriteLine("Building count: {0}", buildingCount);
+        if (buildingCount == 0)
+        {
+          Console.WriteLine("Started to fill table");
+          var insertedCount = await FillBuildingTableAsync(connection).ConfigureAwait(false);
+          Console.WriteLine($"Finish to fill table. Inserted {insertedCount} values");
+        }
       }
+    }
+
+    private static async Task<int> FillBuildingTableAsync(SQLiteConnection connection)
+    {
+      int counter = 0;
+      var tasks = GetBuildingsFromResources(Resources.SpbBuildingsAge)
+        .Select(building => SQLiteHelper.InsertBuildingIntoTableAsync(connection, building))
+        .Select(task => task.ContinueWith(t => Interlocked.Increment(ref counter)));
+      await Task.WhenAll(tasks).ConfigureAwait(false);
+      return counter;
     }
 
     private static void SaveReverseGeocodingResult()
@@ -92,8 +107,8 @@ namespace SpbBuildingAgeMaps
             continue;
           }
           writer.WriteLine("\"{0}\",{1},{2},{3}", building.RawAddress, building.BuildYear,
-            coord.X.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            coord.Y.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            coord.X.ToString(CultureInfo.InvariantCulture),
+            coord.Y.ToString(CultureInfo.InvariantCulture));
         }
       }
     }
