@@ -1,19 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Web;
 using System.Xml.Linq;
 using GeoAPI.Geometries;
-using NetTopologySuite.Features;
-using NetTopologySuite.Geometries;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using SpbBuildingAgeMaps.DataModel;
 
 namespace SpbBuildingAgeMaps
 {
-  static class GeoHelper
+  static partial class GeoHelper
   {
     public static Coordinate ParseCoord(string lonAndLat)
     {
@@ -62,60 +58,6 @@ namespace SpbBuildingAgeMaps
       return null;
     }
 
-    public class OsmObject
-    {
-      public int id;
-      public OsmObjectType type;
-
-      public static OsmObject GetByCoord(Coordinate coord)
-      {
-        string nominatimRequest = GetNominatimRequest(coord);
-        XDocument doc = XDocument.Parse(WebHelper.DownloadString(nominatimRequest));
-        IEnumerable<XElement> resultXElement = doc.Descendants("result");
-        OsmObjectType osmType = (OsmObjectType)Enum.Parse(typeof(OsmObjectType), resultXElement.Attributes("osm_type").First().Value, true);
-        int osmId = int.Parse(resultXElement.Attributes("osm_id").First().Value);
-        return new OsmObject() { id = osmId, type = osmType };
-      }
-
-      public IGeometry GetPoligone(IGeometryFactory geometryFactory)
-      {
-        switch (type)
-        {
-          case GeoHelper.OsmObjectType.Way:
-            return GetPoligonOfWay(id, geometryFactory);
-          case GeoHelper.OsmObjectType.Relation:
-            return GetMultypoligonOfRelation(id, geometryFactory);
-          default:
-            throw new NotImplementedException();
-        }
-      }
-      public static IPolygon GetPoligonOfWay(int wayId, IGeometryFactory geometryFactory)
-      {
-        string wayLink = string.Format("https://www.openstreetmap.org/api/0.6/way/{0}", wayId);
-        XDocument wayObject = XmlHelper.LoadXDocument(wayLink);
-        return geometryFactory.CreatePolygon(
-          wayObject.Descendants("nd")
-            .Attributes("ref")
-            .Select(attribute => GetOsmNodeCoord(attribute.Value))
-            .ToArray());
-      }
-
-      public static IGeometry GetMultypoligonOfRelation(int relationId, IGeometryFactory geometryFactory)
-      {
-        string relationLink = string.Format("http://polygons.openstreetmap.fr/get_geojson.py?id={0}", relationId);
-        string geoJsonPoligon = WebHelper.DownloadString(relationLink).Replace('"', '\'');
-        GeometryCollection geometryCollection = JsonConvert.DeserializeObject<GeometryCollection>(geoJsonPoligon,
-            new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), StringEscapeHandling = StringEscapeHandling.EscapeHtml });
-        return geometryCollection.First(geometry => geometry is IMultiPolygon);
-      }
-    }
-
-    public enum OsmObjectType
-    {
-      Way,
-      Relation
-    }
-
     public static Coordinate GetOsmNodeCoord(string nodeId)
     {
       string nodeLink = string.Format("https://www.openstreetmap.org/api/0.6/node/{0}", nodeId);
@@ -133,6 +75,22 @@ namespace SpbBuildingAgeMaps
         string.Format("http://nominatim.openstreetmap.org/reverse.php?format=xml&lat={0}&lon={1}&zoom=18", coord.Y.ToString(CultureInfo.InvariantCulture),
           coord.X.ToString(CultureInfo.InvariantCulture));
       return nominatimRequest;
+    }
+
+    public static OsmObject GetOsmObject(this Building building)
+    {
+      Coordinate coord = building.GetCoords();
+      return coord != null ? OsmObject.GetByCoord(coord) : null;
+    }
+
+    public static Coordinate GetCoords(this Building building)
+    {
+      return GetYandexCoordOfAddress(building.RawAddress);
+    }
+
+    public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
+    {
+      return building.GetOsmObject()?.GetPoligone(geometryFactory);
     }
   }
 }

@@ -1,22 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using GeoAPI.Geometries;
 using LumenWorks.Framework.IO.Csv;
-using MoreLinq;
 using NetTopologySuite;
 using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using SpbBuildingAgeMaps.DataModel;
 using SpbBuildingAgeMaps.Properties;
 
 namespace SpbBuildingAgeMaps
@@ -27,7 +25,7 @@ namespace SpbBuildingAgeMaps
     {
       Thread.CurrentThread.CurrentCulture = new CultureInfo("en-us");
 
-      CreateAndFillBuldingTableIfNecessary().Wait();
+      CreateAndFillBuldingTableIfNecessaryAsync().Wait();
 
       return;
 
@@ -52,46 +50,28 @@ namespace SpbBuildingAgeMaps
       foreach (Building building in buildings)
       {
         ConsoleHelper.WriteProgress(counter++, allCount);
-        GeoHelper.OsmObject osmObject = building.OsmObject;
+        OsmObject osmObject = building.GetOsmObject();
         IGeometry poligone = osmObject.GetPoligone(geomFactory);
       }
     }
 
-    private static async Task CreateAndFillBuldingTableIfNecessary()
+    private static async Task CreateAndFillBuldingTableIfNecessaryAsync()
     {
-      using (var connection = await SQLiteHelper.GetAndOpenConnetionAsync().ConfigureAwait(false))
+      var connection = SQLiteHelper.GetConnetion();
+      await connection.CreateTableAsync<Building>().ConfigureAwait(false);
+
+      var buildingCount = await connection.Table<Building>().CountAsync().ConfigureAwait(false);
+      if (buildingCount == 0)
       {
-        var tableExist = await SQLiteHelper.IsTableExistAsync(connection, "Building").ConfigureAwait(false);
-
-        if (!tableExist)
-        {
-          throw new NotImplementedException("Table \"Building\" does not exist");
-        }
-
-        var buildingCount = await SQLiteHelper.GetBuildingCountAsync(connection).ConfigureAwait(false);
-        if (buildingCount == 0)
-        {
-          Console.WriteLine("Started to fill table");
-          var insertedCount = await FillBuildingTableAsync(connection).ConfigureAwait(false);
-          Console.WriteLine($"Finish to fill table. Inserted {insertedCount} values");
-        }
+        Console.WriteLine("Started to fill table");
+        var insertedCount = await connection.InsertAllAsync(RepairDepartmentDataSource.GetBuildings()).ConfigureAwait(false);
+        Console.WriteLine($"Finish to fill table. Inserted {insertedCount} values");
       }
-    }
-
-    private static async Task<int> FillBuildingTableAsync(SQLiteConnection connection)
-    {
-      var timeDeterrenter = new TimeDeterrenter(ConsoleHelper.WriteProgress, TimeSpan.FromMilliseconds(200));
-      var tasks = GetBuildingsFromResources(Resources.SpbBuildingsAge)
-        .Batch(500)
-        .Select(buildings => SQLiteHelper.InsertBuildingsIntoTableAsync(connection, buildings))
-        .Select(task => task.ContinueWith(t => timeDeterrenter.PerformAttempt(t.Result)));
-      await Task.WhenAll(tasks).ConfigureAwait(false);
-      return timeDeterrenter.TotalAttemptsCount;
     }
 
     private static void SaveReverseGeocodingResult()
     {
-      List<Building> buildings = GetBuildingsFromResources(Resources.SpbBuildingsAge).ToList();
+      List<Building> buildings = RepairDepartmentDataSource.GetBuildings().ToList();
 
       string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buildingsWithCoords.csv");
       using (StreamWriter writer = new StreamWriter(path))
@@ -102,7 +82,7 @@ namespace SpbBuildingAgeMaps
         foreach (Building building in buildings)
         {
           ConsoleHelper.WriteProgress(counter++, allCount);
-          Coordinate coord = building.Coords;
+          Coordinate coord = building.GetCoords();
           if (coord == null)
           {
             ConsoleHelper.ColorWriteLine(ConsoleColor.Yellow, "Skipped {0}", counter);
@@ -112,26 +92,6 @@ namespace SpbBuildingAgeMaps
             coord.X.ToString(CultureInfo.InvariantCulture),
             coord.Y.ToString(CultureInfo.InvariantCulture));
         }
-      }
-    }
-
-    private static IEnumerable<Building> GetBuildingsFromResources(string buildingsList)
-    {
-      using (StringReader reader = new StringReader(buildingsList))
-      {
-        do
-        {
-          var line = reader.ReadLine();
-          if (line == null)
-          {
-            yield break;
-          }
-          Building building = Building.Parse(line);
-          if (building != null)
-          {
-            yield return building;
-          }
-        } while (true);
       }
     }
 
@@ -146,8 +106,9 @@ namespace SpbBuildingAgeMaps
         }
         while (reader.ReadNextRecord())
         {
-          yield return new Building(reader[0], int.Parse(reader[1]),
-            GeoHelper.ParseCoord(reader[2], reader[3]));
+          //yield return new Building(reader[0], int.Parse(reader[1]),
+          //  GeoHelper.ParseCoord(reader[2], reader[3]));
+          yield break;
         }
       }
     }
