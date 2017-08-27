@@ -12,7 +12,7 @@ namespace SpbBuildingAgeMaps
     {
       get
       {
-        var projectFolder = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory).Nest(Path.GetDirectoryName, 2);
+        var projectFolder = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory).Nest(Path.GetDirectoryName, 3);
         return Path.Combine(projectFolder, "data.db");
       }
     }
