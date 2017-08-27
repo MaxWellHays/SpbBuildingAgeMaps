@@ -58,11 +58,39 @@ namespace SpbBuildingAgeMaps.Migrations
                     b.ToTable("CoordsData");
                 });
 
+            modelBuilder.Entity("SpbBuildingAgeMaps.DataModel.OsmObject", b =>
+                {
+                    b.Property<int>("OsmObjectId")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<int>("CoordDataId");
+
+                    b.Property<int>("ExternalOsmObjectId");
+
+                    b.Property<string>("Source");
+
+                    b.Property<int>("Type");
+
+                    b.HasKey("OsmObjectId");
+
+                    b.HasIndex("CoordDataId");
+
+                    b.ToTable("OsmObjects");
+                });
+
             modelBuilder.Entity("SpbBuildingAgeMaps.DataModel.CoordData", b =>
                 {
                     b.HasOne("SpbBuildingAgeMaps.DataModel.Building", "Building")
                         .WithMany("CoordsData")
                         .HasForeignKey("BuildingId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("SpbBuildingAgeMaps.DataModel.OsmObject", b =>
+                {
+                    b.HasOne("SpbBuildingAgeMaps.DataModel.CoordData", "CoordData")
+                        .WithMany("OsmObjects")
+                        .HasForeignKey("CoordDataId")
                         .OnDelete(DeleteBehavior.Cascade);
                 });
 #pragma warning restore 612, 618

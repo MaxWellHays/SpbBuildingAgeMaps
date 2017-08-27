@@ -47,14 +47,44 @@ namespace SpbBuildingAgeMaps.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "OsmObjects",
+                columns: table => new
+                {
+                    OsmObjectId = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    CoordDataId = table.Column<int>(type: "INTEGER", nullable: false),
+                    ExternalOsmObjectId = table.Column<int>(type: "INTEGER", nullable: false),
+                    Source = table.Column<string>(type: "TEXT", nullable: true),
+                    Type = table.Column<int>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OsmObjects", x => x.OsmObjectId);
+                    table.ForeignKey(
+                        name: "FK_OsmObjects_CoordsData_CoordDataId",
+                        column: x => x.CoordDataId,
+                        principalTable: "CoordsData",
+                        principalColumn: "CoordDataId",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_CoordsData_BuildingId",
                 table: "CoordsData",
                 column: "BuildingId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OsmObjects_CoordDataId",
+                table: "OsmObjects",
+                column: "CoordDataId");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "OsmObjects");
+
             migrationBuilder.DropTable(
                 name: "CoordsData");
 

@@ -92,30 +92,16 @@ namespace SpbBuildingAgeMaps
       double lon = double.Parse(lonValue.Trim('"').Replace(".", ","));
       return new Coordinate(lon, lat);
     }
-
-    public static string GetNominatimRequest(Coordinate coord)
-    {
-      string nominatimRequest =
-        string.Format("http://nominatim.openstreetmap.org/reverse.php?format=xml&lat={0}&lon={1}&zoom=18", coord.Y.ToString(CultureInfo.InvariantCulture),
-          coord.X.ToString(CultureInfo.InvariantCulture));
-      return nominatimRequest;
-    }
-
-    public static OsmObject GetOsmObject(this Building building)
-    {
-      Coordinate coord = building.GetCoords();
-      return coord != null ? OsmObject.GetByCoord(coord) : null;
-    }
-
+    
     public static Coordinate GetCoords(this Building building)
     {
       return GetYandexCoordOfAddress(building.RawAddress);
     }
 
-    public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
-    {
-      return building.GetOsmObject()?.GetPoligone(geometryFactory);
-    }
+    //public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
+    //{
+    //  return OsmObjectHelper.GetByCoord(building.GetCoords())?.GetPoligone(geometryFactory);
+    //}
 
     public static double? NullInsteadNan(this double? value)
     {

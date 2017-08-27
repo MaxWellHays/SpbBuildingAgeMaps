@@ -8,6 +8,7 @@ namespace SpbBuildingAgeMaps.DataModel
   {
     public DbSet<Building> Buildings { get; set; }
     public DbSet<CoordData> CoordsData { get; set; }
+    public DbSet<OsmObject> OsmObjects { get; set; }
 
     public static string DataDbFilePath
     {

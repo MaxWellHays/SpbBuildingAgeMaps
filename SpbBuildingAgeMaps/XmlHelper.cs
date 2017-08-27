@@ -13,6 +13,12 @@ namespace SpbBuildingAgeMaps
       return XDocument.Parse(WebHelper.DownloadString(request));
     }
 
+    public static async Task<XDocument> LoadXDocumentAsync(string request)
+    {
+      var downloadString = await WebHelper.DownloadStringAsync(request).ConfigureAwait(false);
+      return XDocument.Parse(downloadString);
+    }
+
     public static XDocument LoadClearXDocument(string request)
     {
       return XDocument.Parse(xmlnsRepaceRegex.Replace(WebHelper.DownloadString(request), string.Empty));

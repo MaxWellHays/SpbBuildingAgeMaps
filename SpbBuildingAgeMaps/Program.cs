@@ -31,40 +31,70 @@ namespace SpbBuildingAgeMaps
 
       return;
 
-      SaveReverseGeocodingResult();
-      string geoJsonText;
-      using (WebClient client = new WebClient())
-      {
-        geoJsonText = client.DownloadString("http://polygons.openstreetmap.fr/get_geojson.py?id=1204537");
-      }
-      JToken t = JObject.Parse(geoJsonText).SelectToken("geometries[0]");
-      string poligonJson = t.ToString();
-      MultiPolygon geometryCollection = JsonConvert.DeserializeObject<MultiPolygon>(poligonJson,
-          new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
+      //SaveReverseGeocodingResult();
+      //string geoJsonText;
+      //using (WebClient client = new WebClient())
+      //{
+      //  geoJsonText = client.DownloadString("http://polygons.openstreetmap.fr/get_geojson.py?id=1204537");
+      //}
+      //JToken t = JObject.Parse(geoJsonText).SelectToken("geometries[0]");
+      //string poligonJson = t.ToString();
+      //MultiPolygon geometryCollection = JsonConvert.DeserializeObject<MultiPolygon>(poligonJson,
+      //    new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
 
-      var buildings = GetBuildingsWithCoordsFromResources(Resources.buildingsWithCoords).ToList();
+      //var buildings = GetBuildingsWithCoordsFromResources(Resources.buildingsWithCoords).ToList();
 
-      IGeometryFactory geomFactory = NtsGeometryServices.Instance.CreateGeometryFactory();
-      FeatureCollection features = new FeatureCollection();
+      //IGeometryFactory geomFactory = NtsGeometryServices.Instance.CreateGeometryFactory();
+      //FeatureCollection features = new FeatureCollection();
 
-      int counter = 0;
-      int allCount = buildings.Count;
-      foreach (Building building in buildings)
-      {
-        ConsoleHelper.WriteProgress(counter++, allCount);
-        OsmObject osmObject = building.GetOsmObject();
-        IGeometry poligone = osmObject.GetPoligone(geomFactory);
-      }
+      //int counter = 0;
+      //int allCount = buildings.Count;
+      //foreach (Building building in buildings)
+      //{
+      //  ConsoleHelper.WriteProgress(counter++, allCount);
+      //  OsmObject osmObject = OsmObject.GetByCoord(building.GetCoords());
+      //  IGeometry poligone = osmObject.GetPoligone(geomFactory);
+      //}
     }
 
     public static async Task FillDataAsync()
     {
-      await CreateAndFillBuldingTableIfNecessaryAsync().ConfigureAwait(false);
+      await FillBuldingTableAsync().ConfigureAwait(false);
 
-      await GetBuildingWithCoordDataAsync().ConfigureAwait(false);
+      //await FillCoordDataAsync().ConfigureAwait(false);
+
+      await FillOsmDataTableAsync().ConfigureAwait(false);
     }
 
-    private static async Task GetBuildingWithCoordDataAsync()
+    private static async Task FillOsmDataTableAsync()
+    {
+      using (var db = new BuildingContext())
+      {
+        var coordsWithoutOsmObjects = await db.CoordsData.Where(data => data.OsmObjects.Count == 0).ToListAsync().ConfigureAwait(false);
+        foreach (var coordDatas in coordsWithoutOsmObjects.Batch(10))
+        {
+          await Task.WhenAll(coordDatas.Select(AddOsmObjectAsync)).ConfigureAwait(false);
+          await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+      }
+    }
+
+    public static async Task AddOsmObjectAsync(CoordData coordData)
+    {
+      var osmObject = await OsmObjectHelper.GetByCoordAsync(coordData).ConfigureAwait(false);
+      if (osmObject == null)
+      {
+        return;
+      }
+
+      if (coordData.OsmObjects == null)
+      {
+        coordData.OsmObjects = new List<OsmObject>();
+      }
+      coordData.OsmObjects.Add(osmObject);
+    }
+
+    private static async Task FillCoordDataAsync()
     {
       using (var db = new BuildingContext())
       {
@@ -80,7 +110,7 @@ namespace SpbBuildingAgeMaps
 
     private static async Task AddCoordFromYandexAsync(Building building)
     {
-      var coordData = await GetCoordDataForBuildingFromYandex(building).ConfigureAwait(false);
+      var coordData = await GetCoordDataForBuildingFromYandexAsync(building).ConfigureAwait(false);
 
       if (coordData == null)
       {
@@ -94,7 +124,7 @@ namespace SpbBuildingAgeMaps
       building.CoordsData.Add(coordData);
     }
 
-    private static async Task<CoordData> GetCoordDataForBuildingFromYandex(Building building)
+    private static async Task<CoordData> GetCoordDataForBuildingFromYandexAsync(Building building)
     {
       var coordOfAddressFromYandex = await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
       if (coordOfAddressFromYandex != null)
@@ -105,7 +135,7 @@ namespace SpbBuildingAgeMaps
       return null;
     }
 
-    private static async Task CreateAndFillBuldingTableIfNecessaryAsync()
+    private static async Task FillBuldingTableAsync()
     {
       using (var db = new BuildingContext())
       {
@@ -120,74 +150,56 @@ namespace SpbBuildingAgeMaps
       }
     }
 
-    private static void SaveReverseGeocodingResult()
-    {
-      List<Building> buildings = RepairDepartmentDataSource.GetBuildings().ToList();
+    //private static void SaveReverseGeocodingResult()
+    //{
+    //  List<Building> buildings = RepairDepartmentDataSource.GetBuildings().ToList();
 
-      string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buildingsWithCoords.csv");
-      using (StreamWriter writer = new StreamWriter(path))
-      {
-        writer.WriteLine("address,buildYear,lon,lat");
-        int counter = 0;
-        int allCount = buildings.Count;
-        foreach (Building building in buildings)
-        {
-          ConsoleHelper.WriteProgress(counter++, allCount);
-          Coordinate coord = building.GetCoords();
-          if (coord == null)
-          {
-            ConsoleHelper.ColorWriteLine(ConsoleColor.Yellow, "Skipped {0}", counter);
-            continue;
-          }
-          writer.WriteLine("\"{0}\",{1},{2},{3}", building.RawAddress, building.BuildYear,
-            coord.X.ToString(CultureInfo.InvariantCulture),
-            coord.Y.ToString(CultureInfo.InvariantCulture));
-        }
-      }
-    }
+    //  string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buildingsWithCoords.csv");
+    //  using (StreamWriter writer = new StreamWriter(path))
+    //  {
+    //    writer.WriteLine("address,buildYear,lon,lat");
+    //    int counter = 0;
+    //    int allCount = buildings.Count;
+    //    foreach (Building building in buildings)
+    //    {
+    //      ConsoleHelper.WriteProgress(counter++, allCount);
+    //      Coordinate coord = building.GetCoords();
+    //      if (coord == null)
+    //      {
+    //        ConsoleHelper.ColorWriteLine(ConsoleColor.Yellow, "Skipped {0}", counter);
+    //        continue;
+    //      }
+    //      writer.WriteLine("\"{0}\",{1},{2},{3}", building.RawAddress, building.BuildYear,
+    //        coord.X.ToString(CultureInfo.InvariantCulture),
+    //        coord.Y.ToString(CultureInfo.InvariantCulture));
+    //    }
+    //  }
+    //}
 
-    private static IEnumerable<Building> GetBuildingsWithCoordsFromResources(string buildingsList)
-    {
-      using (StringReader stringReader = new StringReader(buildingsList))
-      using (var reader = new CsvReader(stringReader, true))
-      {
-        if (reader.FieldCount != 4)
-        {
-          throw new NotImplementedException();
-        }
-        while (reader.ReadNextRecord())
-        {
-          //yield return new Building(reader[0], int.Parse(reader[1]),
-          //  GeoHelper.ParseCoord(reader[2], reader[3]));
-          yield break;
-        }
-      }
-    }
-
-    static string[] seps = { "\",", ",\"" };
-    static char[] quotes = { '\"', ' ' };
+    static readonly string[] seps = { "\",", ",\"" };
+    static readonly char[] quotes = { '\"', ' ' };
     private static IEnumerable<string> SplitCsvValues(string csvLine)
     {
       return csvLine.Split(seps, StringSplitOptions.None)
         .Select(s => s.Trim(quotes).Replace("\\\"", "\""));
     }
 
-    private static FeatureCollection GetFeatures(IEnumerable<Building> buildings)
-    {
-      IGeometryFactory geomFactory = NtsGeometryServices.Instance.CreateGeometryFactory();
-      FeatureCollection features = new FeatureCollection();
-      int counter = 0;
-      int allCount = buildings.Count();
-      foreach (Building building in buildings)
-      {
-        ConsoleHelper.WriteProgress(counter++, allCount);
-        AttributesTable table = new AttributesTable();
-        table.AddAttribute("address", building.RawAddress);
-        table.AddAttribute("buildYear", building.BuildYear);
-        IGeometry buildingPoligon = building.GetPoligone(geomFactory);
-        features.Add(new Feature(buildingPoligon, table));
-      }
-      return features;
-    }
+    //private static FeatureCollection GetFeatures(IEnumerable<Building> buildings)
+    //{
+    //  IGeometryFactory geomFactory = NtsGeometryServices.Instance.CreateGeometryFactory();
+    //  FeatureCollection features = new FeatureCollection();
+    //  int counter = 0;
+    //  int allCount = buildings.Count();
+    //  foreach (Building building in buildings)
+    //  {
+    //    ConsoleHelper.WriteProgress(counter++, allCount);
+    //    AttributesTable table = new AttributesTable();
+    //    table.AddAttribute("address", building.RawAddress);
+    //    table.AddAttribute("buildYear", building.BuildYear);
+    //    IGeometry buildingPoligon = building.GetPoligone(geomFactory);
+    //    features.Add(new Feature(buildingPoligon, table));
+    //  }
+    //  return features;
+    //}
   }
 }

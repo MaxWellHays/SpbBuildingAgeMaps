@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using GeoAPI.Geometries;
 
 namespace SpbBuildingAgeMaps.DataModel
@@ -8,6 +9,7 @@ namespace SpbBuildingAgeMaps.DataModel
     public int CoordDataId { get; set; }
 
     public int BuildingId { get; set; }
+
     public Building Building { get; set; }
 
     public string Source { get; set; }
@@ -53,5 +55,7 @@ namespace SpbBuildingAgeMaps.DataModel
         Coordinate.Z = value ?? double.NaN;
       }
     }
+
+    public List<OsmObject> OsmObjects { get; set; }
   }
 }
