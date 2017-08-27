@@ -1,20 +1,19 @@
-﻿using SQLite;
+﻿using System.Collections.Generic;
 
 namespace SpbBuildingAgeMaps.DataModel
 {
   class Building
   {
-    [PrimaryKey, AutoIncrement]
-    public int Id { get; set; }
+    public int BuildingId { get; set; }
 
-    [Indexed]
     public string RawAddress { get; set; }
 
     public string BuildingType { get; set; }
 
     public string District { get; set; }
 
-    [Indexed]
     public int BuildYear { get; set; }
+
+    public List<CoordData> CoordsData { get; set; }
   }
 }

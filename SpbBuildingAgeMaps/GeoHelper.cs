@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -114,6 +115,20 @@ namespace SpbBuildingAgeMaps
     public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
     {
       return building.GetOsmObject()?.GetPoligone(geometryFactory);
+    }
+
+    public static double? NullInsteadNan(this double? value)
+    {
+      return value?.NullInsteadNan();
+    }
+
+    public static double? NullInsteadNan(this double value)
+    {
+      if (double.IsNaN(value))
+      {
+        return null;
+      }
+      return value;
     }
   }
 }

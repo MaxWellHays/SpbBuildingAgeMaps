@@ -8,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using GeoAPI.Geometries;
 using LumenWorks.Framework.IO.Csv;
+using Microsoft.EntityFrameworkCore;
+using MoreLinq;
 using NetTopologySuite;
 using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
@@ -16,7 +18,6 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using SpbBuildingAgeMaps.DataModel;
 using SpbBuildingAgeMaps.Properties;
-using SQLite;
 
 namespace SpbBuildingAgeMaps
 {
@@ -65,34 +66,40 @@ namespace SpbBuildingAgeMaps
 
     private static async Task GetBuildingWithCoordDataAsync()
     {
-      var connetion = SQLiteHelper.GetConnetion();
-      var batches = await connetion.Table<Building>().BatchAsync(500).ConfigureAwait(false);
-      var enumerable = batches.Select(task => GetCoordsDataForBuildingsAsync(task.Result, connetion));
-      await Task.WhenAll(enumerable).ConfigureAwait(false);
+      using (var db = new BuildingContext())
+      {
+        var buildingsWithoutCoords = await db.Buildings.Where(building => building.CoordsData.Count == 0).ToListAsync().ConfigureAwait(false);
+        foreach (var buildings in buildingsWithoutCoords.Batch(100))
+        {
+          var buildingWithCoords = buildings.Select(AddCoordFromYandexAsync);
+          await Task.WhenAll(buildingWithCoords).ConfigureAwait(false);
+          await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+      }
     }
 
-    private static Task<List<(Building building, CoordData coordData)>> GetCoordsDataForBuildingsAsync(IEnumerable<Building> buildings, SQLiteAsyncConnection connection)
+    private static async Task AddCoordFromYandexAsync(Building building)
     {
-      var tasks = buildings.Select(building => (building, GetCoordDataAsync(building, connection))).ToList();
-      return Task.WhenAll(tasks.Select(tuple => tuple.Item2)).ContinueWith(task =>
-      {
-        return tasks.Select(tuple => (tuple.Item1, tuple.Item2.Result)).ToList();
-      });
-    }
+      var coordData = await GetCoordDataForBuildingFromYandex(building).ConfigureAwait(false);
 
-    private static async Task<CoordData> GetCoordDataAsync(Building building, SQLiteAsyncConnection connection)
-    {
-      var coordDatas = await connection.Table<CoordData>().Where(data => data.BuildingId == building.Id).ToListAsync().ConfigureAwait(false);
-      if (coordDatas.Any())
+      if (coordData == null)
       {
-        return coordDatas.First();
+        return;
       }
 
+      if (building.CoordsData == null)
+      {
+        building.CoordsData = new List<CoordData>();
+      }
+      building.CoordsData.Add(coordData);
+    }
+
+    private static async Task<CoordData> GetCoordDataForBuildingFromYandex(Building building)
+    {
       var coordOfAddressFromYandex = await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
       if (coordOfAddressFromYandex != null)
       {
-        var coordData = new CoordData { BuildingId = building.Id, Coordinate = coordOfAddressFromYandex, Source = "Yandex" };
-        await connection.InsertAsync(coordData).ConfigureAwait(false);
+        var coordData = new CoordData { BuildingId = building.BuildingId, Building = building, Coordinate = coordOfAddressFromYandex, Source = "Yandex" };
         return coordData;
       }
       return null;
@@ -100,17 +107,16 @@ namespace SpbBuildingAgeMaps
 
     private static async Task CreateAndFillBuldingTableIfNecessaryAsync()
     {
-      var connection = SQLiteHelper.GetConnetion();
-
-      await connection.CreateTableAsync<Building>().ConfigureAwait(false);
-      await connection.CreateTableAsync<CoordData>().ConfigureAwait(false);
-
-      var buildingCount = await connection.Table<Building>().CountAsync().ConfigureAwait(false);
-      if (buildingCount == 0)
+      using (var db = new BuildingContext())
       {
-        Console.WriteLine("Started to fill table");
-        var insertedCount = await connection.InsertAllAsync(RepairDepartmentDataSource.GetBuildings()).ConfigureAwait(false);
-        Console.WriteLine($"Finish to fill table. Inserted {insertedCount} values");
+        var buildingCount = await db.Buildings.CountAsync().ConfigureAwait(false);
+        if (buildingCount == 0)
+        {
+          Console.WriteLine("Started to fill table");
+          await db.Buildings.AddRangeAsync(RepairDepartmentDataSource.GetBuildings()).ConfigureAwait(false);
+          var insertedCount = await db.SaveChangesAsync().ConfigureAwait(false);
+          Console.WriteLine($"Finish to fill table. Inserted {insertedCount} values");
+        }
       }
     }
 

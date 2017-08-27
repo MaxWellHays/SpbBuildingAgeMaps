@@ -1,57 +1,56 @@
-﻿using GeoAPI.Geometries;
-using SQLite;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using GeoAPI.Geometries;
 
 namespace SpbBuildingAgeMaps.DataModel
 {
   class CoordData
   {
-    [PrimaryKey, AutoIncrement]
-    public int Id { get; set; }
+    public int CoordDataId { get; set; }
 
-    [Indexed]
     public int BuildingId { get; set; }
+    public Building Building { get; set; }
 
     public string Source { get; set; }
 
-    [Ignore]
+    [NotMapped]
     public Coordinate Coordinate { get; set; }
 
-    public double X
+    public double? X
     {
-      get => Coordinate?.X ?? 0;
+      get => (Coordinate?.X).NullInsteadNan();
       set
       {
         if (Coordinate == null)
         {
           Coordinate = new Coordinate();
         }
-        Coordinate.X = value;
+        Coordinate.X = value ?? double.NaN;
       }
     }
 
-    public double Y
+    public double? Y
     {
-      get => Coordinate?.Y ?? 0;
+      get => (Coordinate?.Y).NullInsteadNan();
       set
       {
         if (Coordinate == null)
         {
           Coordinate = new Coordinate();
         }
-        Coordinate.Y = value;
+        Coordinate.Y = value ?? double.NaN;
       }
     }
 
-    public double Z
+    public double? Z
     {
-      get => Coordinate?.Z ?? 0;
+      get => (Coordinate?.Z).NullInsteadNan();
       set
       {
         if (Coordinate == null)
         {
           Coordinate = new Coordinate();
         }
-        Coordinate.Z = value;
+        Coordinate.Z = value ?? double.NaN;
       }
     }
   }

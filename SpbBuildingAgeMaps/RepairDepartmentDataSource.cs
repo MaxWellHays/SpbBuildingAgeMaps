@@ -37,7 +37,7 @@ namespace SpbBuildingAgeMaps
       }
       return new Building
       {
-        Id = index,
+        BuildingId = index,
         BuildYear = buildYear,
         RawAddress = buildingParams[1],
         BuildingType = buildingParams[2],
