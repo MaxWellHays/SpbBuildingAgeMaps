@@ -16,6 +16,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using SpbBuildingAgeMaps.DataModel;
 using SpbBuildingAgeMaps.Properties;
+using SQLite;
 
 namespace SpbBuildingAgeMaps
 {
@@ -25,7 +26,7 @@ namespace SpbBuildingAgeMaps
     {
       Thread.CurrentThread.CurrentCulture = new CultureInfo("en-us");
 
-      CreateAndFillBuldingTableIfNecessaryAsync().Wait();
+      FillDataAsync().Wait();
 
       return;
 
@@ -55,10 +56,54 @@ namespace SpbBuildingAgeMaps
       }
     }
 
+    public static async Task FillDataAsync()
+    {
+      await CreateAndFillBuldingTableIfNecessaryAsync().ConfigureAwait(false);
+
+      await GetBuildingWithCoordDataAsync().ConfigureAwait(false);
+    }
+
+    private static async Task GetBuildingWithCoordDataAsync()
+    {
+      var connetion = SQLiteHelper.GetConnetion();
+      var batches = await connetion.Table<Building>().BatchAsync(500).ConfigureAwait(false);
+      var enumerable = batches.Select(task => GetCoordsDataForBuildingsAsync(task.Result, connetion));
+      await Task.WhenAll(enumerable).ConfigureAwait(false);
+    }
+
+    private static Task<List<(Building building, CoordData coordData)>> GetCoordsDataForBuildingsAsync(IEnumerable<Building> buildings, SQLiteAsyncConnection connection)
+    {
+      var tasks = buildings.Select(building => (building, GetCoordDataAsync(building, connection))).ToList();
+      return Task.WhenAll(tasks.Select(tuple => tuple.Item2)).ContinueWith(task =>
+      {
+        return tasks.Select(tuple => (tuple.Item1, tuple.Item2.Result)).ToList();
+      });
+    }
+
+    private static async Task<CoordData> GetCoordDataAsync(Building building, SQLiteAsyncConnection connection)
+    {
+      var coordDatas = await connection.Table<CoordData>().Where(data => data.BuildingId == building.Id).ToListAsync().ConfigureAwait(false);
+      if (coordDatas.Any())
+      {
+        return coordDatas.First();
+      }
+
+      var coordOfAddressFromYandex = await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
+      if (coordOfAddressFromYandex != null)
+      {
+        var coordData = new CoordData { BuildingId = building.Id, Coordinate = coordOfAddressFromYandex, Source = "Yandex" };
+        await connection.InsertAsync(coordData).ConfigureAwait(false);
+        return coordData;
+      }
+      return null;
+    }
+
     private static async Task CreateAndFillBuldingTableIfNecessaryAsync()
     {
       var connection = SQLiteHelper.GetConnetion();
+
       await connection.CreateTableAsync<Building>().ConfigureAwait(false);
+      await connection.CreateTableAsync<CoordData>().ConfigureAwait(false);
 
       var buildingCount = await connection.Table<Building>().CountAsync().ConfigureAwait(false);
       if (buildingCount == 0)

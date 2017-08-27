@@ -5,13 +5,13 @@ namespace SpbBuildingAgeMaps
 {
   static class AddressHelper
   {
-    private static string cityName = "Санкт-Петербург";
+    private static readonly string cityName = "РЎР°РЅРєС‚-РџРµС‚РµСЂР±СѓСЂРі";
 
-    private static Regex literCheckerRegex = new Regex(" ?литер [\\w]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex literCheckerRegex = new Regex(@" ?Р»РёС‚РµСЂ [\p{IsCyrillic}\d]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static IEnumerable<string> NormalizeAddress(string address)
     {
-      string normalizeAddress = address.Replace("ул.", "улица").Replace("пер.", "переулок").Replace("пер.", "переулок");
+      string normalizeAddress = address.Replace("СѓР».", "СѓР»РёС†Р°").Replace("РїРµСЂ.", "РїРµСЂРµСѓР»РѕРє").Replace("РєРѕСЂРї.", "РєРѕСЂРїСѓСЃ");
       normalizeAddress = $"{cityName} {normalizeAddress}";
       yield return normalizeAddress;
 

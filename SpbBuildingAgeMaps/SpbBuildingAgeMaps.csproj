@@ -108,6 +108,7 @@
     <Compile Include="AddressHelper.cs" />
     <Compile Include="ConsoleHelper.cs" />
     <Compile Include="DataModel\Building.cs" />
+    <Compile Include="DataModel\CoordData.cs" />
     <Compile Include="ExtraLINQ.cs" />
     <Compile Include="GeoHelper.cs" />
     <Compile Include="OsmObject.cs" />

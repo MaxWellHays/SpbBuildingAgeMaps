@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 
 namespace SpbBuildingAgeMaps
@@ -15,6 +16,12 @@ namespace SpbBuildingAgeMaps
     public static XDocument LoadClearXDocument(string request)
     {
       return XDocument.Parse(xmlnsRepaceRegex.Replace(WebHelper.DownloadString(request), string.Empty));
+    }
+
+    public static async Task<XDocument> LoadClearXDocumentAsync(string request)
+    {
+      var downloadString = await WebHelper.DownloadStringAsync(request).ConfigureAwait(false);
+      return XDocument.Parse(xmlnsRepaceRegex.Replace(downloadString, string.Empty));
     }
   }
 }

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Web;
 using System.Xml.Linq;
 using GeoAPI.Geometries;
@@ -40,6 +41,28 @@ namespace SpbBuildingAgeMaps
       }
     }
 
+    public static async Task<Coordinate> GetYandexCoordOfAddressAsync(string rawAddress)
+    {
+      foreach (string request in GetYandexRequests(rawAddress))
+      {
+        XDocument doc = await XmlHelper.LoadClearXDocumentAsync(request).ConfigureAwait(false);
+        foreach (XElement geoObject in doc.Descendants("GeoObject"))
+        {
+          string type = geoObject.Descendants("kind").First().Value;
+          if (type == "house")
+          {
+            var coord = ParseCoord(geoObject.Descendants("pos").First().Value);
+            if (coord != null)
+            {
+              return coord;
+            }
+          }
+        }
+      }
+      Debug.WriteLine($"Not found address \"{rawAddress}\"");
+      return null;
+    }
+
     public static Coordinate GetYandexCoordOfAddress(string rawAddress)
     {
       foreach (string request in GetYandexRequests(rawAddress))
@@ -53,7 +76,7 @@ namespace SpbBuildingAgeMaps
             return ParseCoord(geoObject.Descendants("pos").First().Value);
           }
         }
-        Debug.WriteLine("Requenst {0} not found a building", request);
+        Debug.WriteLine("Requenst {0} not found a building", (object)request);
       }
       return null;
     }
