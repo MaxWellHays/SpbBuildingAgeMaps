@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using GeoAPI.Geometries;
@@ -16,7 +17,7 @@ namespace SpbBuildingAgeMaps
   {
     public static async Task<ReverseGeocodeObject> GetReverseGeocodeObjectByCoordAsync(CoordData coordData)
     {
-      var nominatimResult = await GetReverseGeocodeObjectFromNominatimApiAsync(coordData).ConfigureAwait(false);
+      ReverseGeocodeObject nominatimResult = await GetReverseGeocodeObjectFromNominatimApiAsync(coordData).ConfigureAwait(false);
       if (nominatimResult != null)
       {
         return nominatimResult;
@@ -25,21 +26,27 @@ namespace SpbBuildingAgeMaps
     }
 
     #region OverpassApi
-    private static string GetOverpassApiRequest(Coordinate coordinate, double radius)
+
+    private static IEnumerable<string> GetOverpassApiRequests(Coordinate coordinate)
     {
       var latitude = coordinate.Y;
       var longitude = coordinate.X;
-      var dataPart = $"[out:xml]; (way[\"building\"](around:{radius}, {latitude}, {longitude});relation[\"building\"](around:{radius}, {latitude}, {longitude});); out;".Replace(" ", "%20");
-      return "http://overpass-api.de/api/interpreter?data=" + dataPart;
+      string interpreterUrl = "http://overpass-api.de/api/interpreter?data=";
+      for (int i = 1; i < 3; i++)
+      {
+        int radios = i * 10;
+        yield return interpreterUrl + $"[out:xml]; relation[\"building\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
+        yield return interpreterUrl + $"[out:xml]; way[\"building\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
+      }
     }
 
     public static async Task<ReverseGeocodeObject> GetReverseGeocodeObjectFromOverpassApiAsync(CoordData coordData)
     {
       try
       {
-        for (int i = 1; i <= 3; i++)
+        foreach (string request in GetOverpassApiRequests(coordData.Coordinate))
         {
-          var request = GetOverpassApiRequest(coordData.Coordinate, 5 * i * i);
+          await Task.Delay(10000).ConfigureAwait(false);
           var document = await XmlHelper.LoadXDocumentAsync(request).ConfigureAwait(false);
           var osmElement = document.Element("osm");
           foreach (var xElement in osmElement.Descendants())
@@ -79,10 +86,26 @@ namespace SpbBuildingAgeMaps
       return nominatimRequest;
     }
 
+    private static bool isLimitExceeded = false;
+
     private static async Task<ReverseGeocodeObject> GetReverseGeocodeObjectFromNominatimApiAsync(CoordData coordData)
     {
+      if (isLimitExceeded)
+      {
+        return null;
+      }
+
       string nominatimRequest = GetNominatimRequest(coordData.Coordinate);
-      XDocument doc = await XmlHelper.LoadXDocumentAsync(nominatimRequest).ConfigureAwait(false);
+      XDocument doc;
+      try
+      {
+        doc = await XmlHelper.LoadXDocumentAsync(nominatimRequest).ConfigureAwait(false);
+      }
+      catch (WebException exception)
+      {
+        isLimitExceeded = true;
+        return null;
+      }
 
       var element = doc.Element("reversegeocode")?.Element("result");
       if (element == null)

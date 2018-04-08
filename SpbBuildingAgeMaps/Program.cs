@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -23,9 +24,19 @@ namespace SpbBuildingAgeMaps
     {
       Thread.CurrentThread.CurrentCulture = new CultureInfo("en-us");
 
-      await FillDataAsync().ConfigureAwait(false);
+      ThreadPool.SetMinThreads(1, 0);
+      ThreadPool.SetMaxThreads(1, 0);
 
-      await ExportDataAsync();
+      try
+      {
+        await FillDataAsync().ConfigureAwait(false);
+      }
+      catch (Exception e)
+      {
+        Debug.WriteLine(e);
+      }
+
+      await ExportDataAsync().ConfigureAwait(false);
     }
 
     public static async Task FillDataAsync()
@@ -34,7 +45,7 @@ namespace SpbBuildingAgeMaps
 
       //await FillCoordDataAsync().ConfigureAwait(false);
 
-      await FillReverseGeocodeObjectTableAsync().ConfigureAwait(false);
+      //await FillReverseGeocodeObjectTableAsync().ConfigureAwait(false);
 
       await FillPoligonDataAsync().ConfigureAwait(false);
     }
@@ -91,9 +102,9 @@ namespace SpbBuildingAgeMaps
           List<CoordData> currentCoordsBatch = coordDatas.ToList();
           await Task.WhenAll(currentCoordsBatch.Select(AddReverseGeocodeObjectAsync)).ConfigureAwait(false);
 
-          IEnumerable<ReverseGeocodeObject> reverseObjectsWithoutPoligon = currentCoordsBatch
-              .SelectMany(data => data.ReverseGeocodeObjects)
-              .Where(reverseObj => !existingOsmObjectId.Contains(reverseObj.OsmObjectId));
+          var reverseObjectsWithoutPoligon = currentCoordsBatch
+              .SelectMany(data => data.ReverseGeocodeObjects ?? Enumerable.Empty<ReverseGeocodeObject>())
+              .Where(reverseObj => reverseObj != null && !existingOsmObjectId.Contains(reverseObj.OsmObjectId));
 
           foreach (var reverseGeocodeObject in reverseObjectsWithoutPoligon.DistinctBy(o => o.OsmObjectId))
           {
@@ -137,7 +148,7 @@ namespace SpbBuildingAgeMaps
       {
         var buildingsWithoutCoords = await db.Buildings.Where(building => building.CoordsData.Count == 0)
             .ToListAsync().ConfigureAwait(false);
-        foreach (var buildings in buildingsWithoutCoords.Batch(100))
+        foreach (var buildings in buildingsWithoutCoords.Batch(10))
         {
           var buildingWithCoords = buildings.Select(AddCoordFromYandexAsync);
           await Task.WhenAll(buildingWithCoords).ConfigureAwait(false);
@@ -165,8 +176,7 @@ namespace SpbBuildingAgeMaps
 
     private static async Task<CoordData> GetCoordDataForBuildingFromYandexAsync(Building building)
     {
-      var coordOfAddressFromYandex =
-          await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
+      var coordOfAddressFromYandex = await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
       if (coordOfAddressFromYandex != null)
       {
         var coordData = new CoordData

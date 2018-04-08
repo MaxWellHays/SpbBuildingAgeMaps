@@ -44,55 +44,64 @@ namespace SpbBuildingAgeMaps
 
     public static async Task<Coordinate> GetYandexCoordOfAddressAsync(string rawAddress)
     {
-      foreach (string request in GetYandexRequests(rawAddress))
+      try
       {
-        XDocument doc = await XmlHelper.LoadClearXDocumentAsync(request).ConfigureAwait(false);
-        foreach (XElement geoObject in doc.Descendants("GeoObject"))
+        foreach (string request in GetYandexRequests(rawAddress))
         {
-          string type = geoObject.Descendants("kind").First().Value;
-          if (type == "house")
+          XDocument doc = await XmlHelper.LoadClearXDocumentAsync(request).ConfigureAwait(false);
+          foreach (XElement geoObject in doc.Descendants("GeoObject"))
           {
-            var coord = ParseCoord(geoObject.Descendants("pos").First().Value);
-            if (coord != null)
+            string type = geoObject.Descendants("kind").First().Value;
+            if (type == "house")
             {
-              return coord;
+              var coord = ParseCoord(geoObject.Descendants("pos").First().Value);
+              if (coord != null)
+              {
+                return coord;
+              }
             }
           }
         }
-      }
-      Debug.WriteLine($"Not found address \"{rawAddress}\"");
-      return null;
-    }
-    
-    public static async Task<Coordinate> GetOsmNodeCoordAsync(string nodeId)
-    {
-      string nodeLink = string.Format("https://www.openstreetmap.org/api/0.6/node/{0}", nodeId);
-      var nodeDoc = await XmlHelper.LoadXDocumentAsync(nodeLink).ConfigureAwait(false);
-      string latValue = nodeDoc.Descendants("node").Attributes("lat").First().Value;
-      double lat = double.Parse(latValue.Trim('"'));
-      string lonValue = nodeDoc.Descendants("node").Attributes("lon").First().Value;
-      double lon = double.Parse(lonValue.Trim('"'));
-      await ConsoleHelper.ColorWriteLineAsync(ConsoleColor.Yellow, "Received coord ({1}; {2}) with id {0}", nodeId, lon, lat).ConfigureAwait(false);
-      return new Coordinate(lon, lat);
-    }
 
-    //public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
-    //{
-    //  return OsmObjectHelper.GetByCoord(building.GetCoords())?.GetPoligone(geometryFactory);
-    //}
-
-    public static double? NullInsteadNan(this double? value)
-    {
-      return value?.NullInsteadNan();
-    }
-
-    public static double? NullInsteadNan(this double value)
-    {
-      if (double.IsNaN(value))
-      {
+        Debug.WriteLine($"Not found address \"{rawAddress}\"");
         return null;
       }
-      return value;
+      catch (Exception e)
+      {
+        Debug.WriteLine($"Exception during downloading from yandex");
+        return null;
+      }
     }
+
+  public static async Task<Coordinate> GetOsmNodeCoordAsync(string nodeId)
+  {
+    string nodeLink = string.Format("https://www.openstreetmap.org/api/0.6/node/{0}", nodeId);
+    var nodeDoc = await XmlHelper.LoadXDocumentAsync(nodeLink).ConfigureAwait(false);
+    string latValue = nodeDoc.Descendants("node").Attributes("lat").First().Value;
+    double lat = double.Parse(latValue.Trim('"'));
+    string lonValue = nodeDoc.Descendants("node").Attributes("lon").First().Value;
+    double lon = double.Parse(lonValue.Trim('"'));
+    await ConsoleHelper.ColorWriteLineAsync(ConsoleColor.Yellow, "Received coord ({1}; {2}) with id {0}", nodeId, lon, lat).ConfigureAwait(false);
+    return new Coordinate(lon, lat);
   }
+
+  //public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
+  //{
+  //  return OsmObjectHelper.GetByCoord(building.GetCoords())?.GetPoligone(geometryFactory);
+  //}
+
+  public static double? NullInsteadNan(this double? value)
+  {
+    return value?.NullInsteadNan();
+  }
+
+  public static double? NullInsteadNan(this double value)
+  {
+    if (double.IsNaN(value))
+    {
+      return null;
+    }
+    return value;
+  }
+}
 }
