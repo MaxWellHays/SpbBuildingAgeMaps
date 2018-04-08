@@ -56,6 +56,6 @@ namespace SpbBuildingAgeMaps.DataModel
       }
     }
 
-    public List<OsmObject> OsmObjects { get; set; }
+    public List<ReverseGeocodeObject> ReverseGeocodeObjects { get; set; }
   }
 }

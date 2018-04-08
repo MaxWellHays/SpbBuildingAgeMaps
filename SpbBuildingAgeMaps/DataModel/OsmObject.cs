@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace SpbBuildingAgeMaps.DataModel
 {
@@ -8,21 +6,10 @@ namespace SpbBuildingAgeMaps.DataModel
   {
     public int OsmObjectId { get; set; }
 
-    public int ExternalOsmObjectId { get; set; }
-
-    public OsmObjectType Type { get; set; }
-
-    public int CoordDataId { get; set; }
-
-    public CoordData CoordData { get; set; }
+    public List<ReverseGeocodeObject> ReverseGeocodeObjects { get; set; }
 
     public string Source { get; set; }
-  }
 
-  public enum OsmObjectType
-  {
-    Way,
-    Relation,
-    Node
+    public byte[] GeometryData { get; set; } 
   }
 }

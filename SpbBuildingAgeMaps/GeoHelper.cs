@@ -63,39 +63,17 @@ namespace SpbBuildingAgeMaps
       Debug.WriteLine($"Not found address \"{rawAddress}\"");
       return null;
     }
-
-    public static Coordinate GetYandexCoordOfAddress(string rawAddress)
-    {
-      foreach (string request in GetYandexRequests(rawAddress))
-      {
-        XDocument doc = XmlHelper.LoadClearXDocument(request);
-        foreach (XElement geoObject in doc.Descendants("GeoObject"))
-        {
-          string type = geoObject.Descendants("kind").First().Value;
-          if (type == "house")
-          {
-            return ParseCoord(geoObject.Descendants("pos").First().Value);
-          }
-        }
-        Debug.WriteLine("Requenst {0} not found a building", (object)request);
-      }
-      return null;
-    }
-
-    public static Coordinate GetOsmNodeCoord(string nodeId)
+    
+    public static async Task<Coordinate> GetOsmNodeCoordAsync(string nodeId)
     {
       string nodeLink = string.Format("https://www.openstreetmap.org/api/0.6/node/{0}", nodeId);
-      var nodeDoc = XmlHelper.LoadXDocument(nodeLink);
+      var nodeDoc = await XmlHelper.LoadXDocumentAsync(nodeLink).ConfigureAwait(false);
       string latValue = nodeDoc.Descendants("node").Attributes("lat").First().Value;
       double lat = double.Parse(latValue.Trim('"').Replace(".", ","));
       string lonValue = nodeDoc.Descendants("node").Attributes("lon").First().Value;
       double lon = double.Parse(lonValue.Trim('"').Replace(".", ","));
+      await ConsoleHelper.ColorWriteLineAsync(ConsoleColor.Yellow, "Received coord ({1}; {2}) with id {0}", nodeId, lon, lat).ConfigureAwait(false);
       return new Coordinate(lon, lat);
-    }
-    
-    public static Coordinate GetCoords(this Building building)
-    {
-      return GetYandexCoordOfAddress(building.RawAddress);
     }
 
     //public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)

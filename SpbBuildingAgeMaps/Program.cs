@@ -1,60 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using GeoAPI.Geometries;
-using LumenWorks.Framework.IO.Csv;
 using Microsoft.EntityFrameworkCore;
 using MoreLinq;
-using NetTopologySuite;
-using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
+using NetTopologySuite.IO;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using SpbBuildingAgeMaps.DataModel;
-using SpbBuildingAgeMaps.Properties;
 
 namespace SpbBuildingAgeMaps
 {
   class Program
   {
-    static void Main()
+    static async Task Main()
     {
       Thread.CurrentThread.CurrentCulture = new CultureInfo("en-us");
 
-      FillDataAsync().Wait();
+      await FillDataAsync().ConfigureAwait(false);
 
-      return;
-
-      //SaveReverseGeocodingResult();
-      //string geoJsonText;
-      //using (WebClient client = new WebClient())
-      //{
-      //  geoJsonText = client.DownloadString("http://polygons.openstreetmap.fr/get_geojson.py?id=1204537");
-      //}
-      //JToken t = JObject.Parse(geoJsonText).SelectToken("geometries[0]");
-      //string poligonJson = t.ToString();
-      //MultiPolygon geometryCollection = JsonConvert.DeserializeObject<MultiPolygon>(poligonJson,
-      //    new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
-
-      //var buildings = GetBuildingsWithCoordsFromResources(Resources.buildingsWithCoords).ToList();
-
-      //IGeometryFactory geomFactory = NtsGeometryServices.Instance.CreateGeometryFactory();
-      //FeatureCollection features = new FeatureCollection();
-
-      //int counter = 0;
-      //int allCount = buildings.Count;
-      //foreach (Building building in buildings)
-      //{
-      //  ConsoleHelper.WriteProgress(counter++, allCount);
-      //  OsmObject osmObject = OsmObject.GetByCoord(building.GetCoords());
-      //  IGeometry poligone = osmObject.GetPoligone(geomFactory);
-      //}
+      await ExportDataAsync();
     }
 
     public static async Task FillDataAsync()
@@ -63,42 +32,107 @@ namespace SpbBuildingAgeMaps
 
       //await FillCoordDataAsync().ConfigureAwait(false);
 
-      await FillOsmDataTableAsync().ConfigureAwait(false);
+      await FillReverseGeocodeObjectTableAsync().ConfigureAwait(false);
+
+      await FillPoligonDataAsync().ConfigureAwait(false);
     }
 
-    private static async Task FillOsmDataTableAsync()
+    private static async Task FillPoligonDataAsync()
     {
       using (var db = new BuildingContext())
       {
-        var coordsWithoutOsmObjects = await db.CoordsData.Where(data => data.OsmObjects.Count == 0).ToListAsync().ConfigureAwait(false);
-        foreach (var coordDatas in coordsWithoutOsmObjects.Batch(10))
+        var osmObjectsIdWithoutGeometryData = await db.ReverseGeocodeObjects.Where(o => o.OsmObject == null)
+            .Select(o => Tuple.Create(o.OsmObjectId, o.Type)).Distinct().ToListAsync().ConfigureAwait(false);
+        foreach (var coordDatas in osmObjectsIdWithoutGeometryData.Batch(10))
         {
-          await Task.WhenAll(coordDatas.Select(AddOsmObjectAsync)).ConfigureAwait(false);
+          var tasks = coordDatas.Select(tuple => GetOsmPoligonDataAsync(tuple.Item1, tuple.Item2)).ToList();
+          var osmObjects = await Task.WhenAll(tasks).ConfigureAwait(false);
+          await db.OsmObjects.AddRangeAsync(osmObjects).ConfigureAwait(false);
           await db.SaveChangesAsync().ConfigureAwait(false);
         }
       }
     }
 
-    public static async Task AddOsmObjectAsync(CoordData coordData)
+    private static readonly GeometryFactory GeometryFactory = new GeometryFactory();
+
+    private static async Task<OsmObject> GetOsmPoligonDataAsync(int osmObjectId, OsmObjectType osmObjectType)
     {
-      var osmObject = await OsmObjectHelper.GetByCoordAsync(coordData).ConfigureAwait(false);
+      var geometry = await OsmObjectHelper.GetPoligoneAsync(osmObjectId, osmObjectType, GeometryFactory)
+          .ConfigureAwait(false);
+      if (geometry == null)
+      {
+        return null;
+      }
+
+      var osmObject = new OsmObject
+      {
+        OsmObjectId = osmObjectId,
+        Source = "",
+        GeometryData = geometry.AsBinary(),
+      };
+      return osmObject;
+    }
+
+    private static async Task FillReverseGeocodeObjectTableAsync()
+    {
+      using (var db = new BuildingContext())
+      {
+        var coordsWithoutOsmObjects = await db.CoordsData.Where(data => data.ReverseGeocodeObjects.Count == 0)
+            .ToListAsync().ConfigureAwait(false);
+
+        HashSet<int> existingOsmObjectId = new HashSet<int>(db.OsmObjects.Select(o => o.OsmObjectId));
+
+        foreach (IEnumerable<CoordData> coordDatas in coordsWithoutOsmObjects.Batch(10))
+        {
+          List<CoordData> currentCoordsBatch = coordDatas.ToList();
+          await Task.WhenAll(currentCoordsBatch.Select(AddReverseGeocodeObjectAsync)).ConfigureAwait(false);
+
+          IEnumerable<ReverseGeocodeObject> reverseObjectsWithoutPoligon = currentCoordsBatch
+              .SelectMany(data => data.ReverseGeocodeObjects)
+              .Where(reverseObj => !existingOsmObjectId.Contains(reverseObj.OsmObjectId));
+
+          foreach (var reverseGeocodeObject in reverseObjectsWithoutPoligon.DistinctBy(o => o.OsmObjectId))
+          {
+            var osmObject = await GetOsmPoligonDataAsync(reverseGeocodeObject.OsmObjectId, reverseGeocodeObject.Type).ConfigureAwait(false);
+            if (osmObject != null)
+            {
+              reverseGeocodeObject.OsmObject = osmObject;
+              await db.OsmObjects.AddAsync(osmObject).ConfigureAwait(false);
+              Debug.Assert(existingOsmObjectId.Add(osmObject.OsmObjectId), "Added existing element to set");
+            }
+            else
+            {
+              Debug.Assert(false);
+            }
+          }
+
+          await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+      }
+    }
+
+    public static async Task AddReverseGeocodeObjectAsync(CoordData coordData)
+    {
+      var osmObject = await OsmObjectHelper.GetReverseGeocodeObjectByCoordAsync(coordData).ConfigureAwait(false);
       if (osmObject == null)
       {
         return;
       }
 
-      if (coordData.OsmObjects == null)
+      if (coordData.ReverseGeocodeObjects == null)
       {
-        coordData.OsmObjects = new List<OsmObject>();
+        coordData.ReverseGeocodeObjects = new List<ReverseGeocodeObject>();
       }
-      coordData.OsmObjects.Add(osmObject);
+
+      coordData.ReverseGeocodeObjects.Add(osmObject);
     }
 
     private static async Task FillCoordDataAsync()
     {
       using (var db = new BuildingContext())
       {
-        var buildingsWithoutCoords = await db.Buildings.Where(building => building.CoordsData.Count == 0).ToListAsync().ConfigureAwait(false);
+        var buildingsWithoutCoords = await db.Buildings.Where(building => building.CoordsData.Count == 0)
+            .ToListAsync().ConfigureAwait(false);
         foreach (var buildings in buildingsWithoutCoords.Batch(100))
         {
           var buildingWithCoords = buildings.Select(AddCoordFromYandexAsync);
@@ -121,17 +155,26 @@ namespace SpbBuildingAgeMaps
       {
         building.CoordsData = new List<CoordData>();
       }
+
       building.CoordsData.Add(coordData);
     }
 
     private static async Task<CoordData> GetCoordDataForBuildingFromYandexAsync(Building building)
     {
-      var coordOfAddressFromYandex = await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
+      var coordOfAddressFromYandex =
+          await GeoHelper.GetYandexCoordOfAddressAsync(building.RawAddress).ConfigureAwait(false);
       if (coordOfAddressFromYandex != null)
       {
-        var coordData = new CoordData { BuildingId = building.BuildingId, Building = building, Coordinate = coordOfAddressFromYandex, Source = "Yandex" };
+        var coordData = new CoordData
+        {
+          BuildingId = building.BuildingId,
+          Building = building,
+          Coordinate = coordOfAddressFromYandex,
+          Source = "Yandex"
+        };
         return coordData;
       }
+
       return null;
     }
 
@@ -178,10 +221,11 @@ namespace SpbBuildingAgeMaps
 
     static readonly string[] seps = { "\",", ",\"" };
     static readonly char[] quotes = { '\"', ' ' };
+
     private static IEnumerable<string> SplitCsvValues(string csvLine)
     {
       return csvLine.Split(seps, StringSplitOptions.None)
-        .Select(s => s.Trim(quotes).Replace("\\\"", "\""));
+          .Select(s => s.Trim(quotes).Replace("\\\"", "\""));
     }
 
     //private static FeatureCollection GetFeatures(IEnumerable<Building> buildings)
@@ -201,5 +245,42 @@ namespace SpbBuildingAgeMaps
     //  }
     //  return features;
     //}
+
+    private static async Task ExportDataAsync()
+    {
+      using (var dbContext = new BuildingContext())
+      {
+        var query = dbContext.Buildings
+          .Include(building => building.CoordsData)
+          .Include(building => building.CoordsData.Select(data => data.ReverseGeocodeObjects))
+          .Include(building => building.CoordsData.Select(data => data.ReverseGeocodeObjects.Select(o => o.OsmObject)));
+
+        var buildingForExport = await query.Select(building => new
+        {
+          building.BuildingId,
+          building.RawAddress,
+          building.BuildYear,
+          building.CoordsData.First().ReverseGeocodeObjects.First().OsmObject.GeometryData
+        }).ToListAsync().ConfigureAwait(false);
+
+
+        WKBReader wkbReader = new WKBReader();
+        using (StreamWriter writer = File.CreateText(@"E:\eport"))
+        {
+          //foreach (var data in buildingForExport)
+          //{
+          //  var geometry = wkbReader.Read(data.GeometryData);
+          //  GeoJsonReader reader = new NetTopologySuite.IO.GeoJsonReader()
+          //  var line = string.Join(",", data.BuildingId, data.BuildYear, EscapeAndQuoteString(data.RawAddress), EscapeAndQuoteString(geometry))
+          //  await writer.WriteLineAsync();
+          //}
+        }
+      }
+    }
+
+    private static string EscapeAndQuoteString(string source)
+    {
+      return "\"" + source + "\"";
+    }
   }
 }

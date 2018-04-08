@@ -1,32 +1,47 @@
 ﻿using System;
+using System.Threading.Tasks;
+using JetBrains.Annotations;
+using Nito.AsyncEx;
 
 namespace SpbBuildingAgeMaps
 {
   static class ConsoleHelper
   {
-    public static void ColorWriteLine(ConsoleColor color, string format, params object[] formatParams)
+    private static readonly AsyncLock mutex = new AsyncLock();
+
+    [StringFormatMethod("format")]
+    public static async Task ColorWriteLineAsync(ConsoleColor color, string format, params object[] formatParams)
     {
-      ConsoleColor keepColor = Console.ForegroundColor;
-      Console.ForegroundColor = color;
-      Console.WriteLine(format, formatParams);
-      Console.ForegroundColor = keepColor;
+      using (await mutex.LockAsync().ConfigureAwait(false))
+      {
+        ConsoleColor keepColor = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+        Console.WriteLine(format, formatParams);
+        Console.ForegroundColor = keepColor;
+      }
     }
 
-    public static void ErrorWriteLine(string format, params object[] formatParams)
+    public static Task ErrorWriteLineAsync(string format, params object[] formatParams)
     {
-      ColorWriteLine(ConsoleColor.Red, format, formatParams);
+      return ColorWriteLineAsync(ConsoleColor.Red, format, formatParams);
     }
 
-    public static void WriteProgress(int processed, int fullCount)
+    public static async Task WriteProgressAsync(int processed, int fullCount)
     {
-      Console.Write("Progress {0}/{1}", processed, fullCount);
-      Console.CursorLeft = 0;
+      using (await mutex.LockAsync().ConfigureAwait(false))
+      {
+        Console.Write("Progress {0}/{1}", processed, fullCount);
+        Console.CursorLeft = 0;
+      }
     }
 
-    public static void WriteProgress(int processed)
+    public static async Task WriteProgressAsync(int processed)
     {
-      Console.Write("Progress {0}", processed);
-      Console.CursorLeft = 0;
+      using (await mutex.LockAsync().ConfigureAwait(false))
+      {
+        Console.Write("Progress {0}", processed);
+        Console.CursorLeft = 0;
+      }
     }
   }
 }

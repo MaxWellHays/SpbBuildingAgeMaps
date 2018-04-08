@@ -1,27 +1,25 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
+    <LangVersion>7.1</LangVersion>
   </PropertyGroup>
-
   <ItemGroup>
     <DotNetCliToolReference Include="Microsoft.EntityFrameworkCore.Tools.DotNet" Version="2.0.0" />
   </ItemGroup>
-  
   <ItemGroup>
-    <PackageReference Include="GeoAPI" Version="1.7.4" />
+    <PackageReference Include="JetBrains.Annotations" Version="11.1.0" />
     <PackageReference Include="LumenWorks.Framework.IO" Version="3.8.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="2.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="2.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Design" Version="1.1.2" />
-    <PackageReference Include="morelinq" Version="2.6.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="2.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="2.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Design" Version="1.1.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="2.0.2" />
+    <PackageReference Include="morelinq" Version="2.10.0" />
     <PackageReference Include="NetTopologySuite" Version="1.14.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+    <PackageReference Include="Nito.AsyncEx" Version="4.0.1" />
   </ItemGroup>
-  
   <ItemGroup>
     <Folder Include="Migrations\" />
   </ItemGroup>
-
 </Project>
