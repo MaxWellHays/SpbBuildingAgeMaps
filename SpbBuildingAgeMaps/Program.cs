@@ -6,11 +6,13 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using GeoAPI.Geometries;
 using Microsoft.EntityFrameworkCore;
 using MoreLinq;
+using NetTopologySuite;
 using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Implementation;
 using NetTopologySuite.IO;
-using Newtonsoft.Json;
 using SpbBuildingAgeMaps.DataModel;
 
 namespace SpbBuildingAgeMaps
@@ -53,12 +55,13 @@ namespace SpbBuildingAgeMaps
       }
     }
 
-    private static readonly GeometryFactory GeometryFactory = new GeometryFactory();
+    private static readonly ThreadLocal<GeometryFactory> GeometryFactory = new ThreadLocal<GeometryFactory>(()=> new GeometryFactory());
+    private static readonly ThreadLocal<WKBWriter> BinaryWriter = new ThreadLocal<WKBWriter>(() => new WKBWriter());
+    private static readonly ThreadLocal<WKBReader> BinaryReader = new ThreadLocal<WKBReader>(() => new WKBReader());
 
     private static async Task<OsmObject> GetOsmPoligonDataAsync(int osmObjectId, OsmObjectType osmObjectType)
     {
-      var geometry = await OsmObjectHelper.GetPoligoneAsync(osmObjectId, osmObjectType, GeometryFactory)
-          .ConfigureAwait(false);
+      var geometry = await OsmObjectHelper.GetPoligoneAsync(osmObjectId, osmObjectType, GeometryFactory.Value).ConfigureAwait(false);
       if (geometry == null)
       {
         return null;
@@ -68,8 +71,9 @@ namespace SpbBuildingAgeMaps
       {
         OsmObjectId = osmObjectId,
         Source = "",
-        GeometryData = geometry.AsBinary(),
+        GeometryData = BinaryWriter.Value.Write(geometry),
       };
+
       return osmObject;
     }
 
@@ -246,41 +250,57 @@ namespace SpbBuildingAgeMaps
     //  return features;
     //}
 
+    public class BuildingExportData
+    {
+      public int BuildingId { get; }
+      public string RawAddress { get; }
+      public int BuildYear { get; }
+      public byte[] GeometryData { get; }
+
+      public BuildingExportData(int buildingId, string rawAddress, int buildYear, byte[] geometryData)
+      {
+        BuildingId = buildingId;
+        RawAddress = rawAddress;
+        BuildYear = buildYear;
+        GeometryData = geometryData;
+      }
+    }
+
     private static async Task ExportDataAsync()
     {
       using (var dbContext = new BuildingContext())
       {
         var query = dbContext.Buildings
           .Include(building => building.CoordsData)
-          .Include(building => building.CoordsData.Select(data => data.ReverseGeocodeObjects))
-          .Include(building => building.CoordsData.Select(data => data.ReverseGeocodeObjects.Select(o => o.OsmObject)));
+          .ThenInclude(data => data.ReverseGeocodeObjects)
+          .ThenInclude(reverseObj => reverseObj.OsmObject);
 
-        var buildingForExport = await query.Select(building => new
+        var buildingForExport = await query.Select(building => new BuildingExportData(building.BuildingId,
+            building.RawAddress, building.BuildYear,
+            building.CoordsData.SelectMany(data => data.ReverseGeocodeObjects.Select(o => o.OsmObject.GeometryData)).FirstOrDefault()))
+          .Where(data => data.GeometryData != null)
+          .ToListAsync().ConfigureAwait(false);
+
+        WKBReader wkbReader = BinaryReader.Value;
+        GeoJsonWriter jsonWriter = new GeoJsonWriter();
+        using (StreamWriter writer = File.CreateText(@"E:\export.csv"))
         {
-          building.BuildingId,
-          building.RawAddress,
-          building.BuildYear,
-          building.CoordsData.First().ReverseGeocodeObjects.First().OsmObject.GeometryData
-        }).ToListAsync().ConfigureAwait(false);
-
-
-        WKBReader wkbReader = new WKBReader();
-        using (StreamWriter writer = File.CreateText(@"E:\eport"))
-        {
-          //foreach (var data in buildingForExport)
-          //{
-          //  var geometry = wkbReader.Read(data.GeometryData);
-          //  GeoJsonReader reader = new NetTopologySuite.IO.GeoJsonReader()
-          //  var line = string.Join(",", data.BuildingId, data.BuildYear, EscapeAndQuoteString(data.RawAddress), EscapeAndQuoteString(geometry))
-          //  await writer.WriteLineAsync();
-          //}
+          await writer.WriteLineAsync(string.Join(",", "build_year", "address", "geojson")).ConfigureAwait(false);
+          foreach (var data in buildingForExport)
+          {
+            var geometry = wkbReader.Read(data.GeometryData);
+            var geometryGeoJson = jsonWriter.Write(geometry);
+            var line = string.Join(",", data.BuildYear, EscapeAndQuoteString(data.RawAddress),
+              EscapeAndQuoteString(geometryGeoJson));
+            await writer.WriteLineAsync(line).ConfigureAwait(false);
+          }
         }
       }
     }
 
     private static string EscapeAndQuoteString(string source)
     {
-      return "\"" + source + "\"";
+      return "\"" + source.Replace("\"","\"\"") + "\"";
     }
   }
 }

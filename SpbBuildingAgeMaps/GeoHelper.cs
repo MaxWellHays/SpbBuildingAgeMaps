@@ -69,9 +69,9 @@ namespace SpbBuildingAgeMaps
       string nodeLink = string.Format("https://www.openstreetmap.org/api/0.6/node/{0}", nodeId);
       var nodeDoc = await XmlHelper.LoadXDocumentAsync(nodeLink).ConfigureAwait(false);
       string latValue = nodeDoc.Descendants("node").Attributes("lat").First().Value;
-      double lat = double.Parse(latValue.Trim('"').Replace(".", ","));
+      double lat = double.Parse(latValue.Trim('"'));
       string lonValue = nodeDoc.Descendants("node").Attributes("lon").First().Value;
-      double lon = double.Parse(lonValue.Trim('"').Replace(".", ","));
+      double lon = double.Parse(lonValue.Trim('"'));
       await ConsoleHelper.ColorWriteLineAsync(ConsoleColor.Yellow, "Received coord ({1}; {2}) with id {0}", nodeId, lon, lat).ConfigureAwait(false);
       return new Coordinate(lon, lat);
     }
