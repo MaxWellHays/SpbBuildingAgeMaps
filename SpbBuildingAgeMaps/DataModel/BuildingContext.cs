@@ -6,10 +6,9 @@ namespace SpbBuildingAgeMaps.DataModel
 {
   class BuildingContext : DbContext
   {
-    public DbSet<Building> Buildings { get; set; }
-    public DbSet<CoordData> CoordsData { get; set; }
-    public DbSet<ReverseGeocodeObject> ReverseGeocodeObjects { get; set; }
-    public DbSet<OsmObject> OsmObjects { get; set; }
+    public DbSet<BuildingInfo> BuildingInfos { get; set; }
+    public DbSet<BuildingInfoWithLocation> BuildingInfoWithLocations { get; set; }
+    public DbSet<BuildingInfoWithPoligon> BuildingInfoWithPoligons { get; set; }
 
     public static string DataDbFilePath
     {

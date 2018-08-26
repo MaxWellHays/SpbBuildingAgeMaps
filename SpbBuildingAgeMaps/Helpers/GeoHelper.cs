@@ -8,6 +8,7 @@ using System.Web;
 using System.Xml.Linq;
 using GeoAPI.Geometries;
 using SpbBuildingAgeMaps.DataModel;
+using SpbBuildingAgeMaps.Helpers;
 
 namespace SpbBuildingAgeMaps
 {
@@ -85,9 +86,9 @@ namespace SpbBuildingAgeMaps
     return new Coordinate(lon, lat);
   }
 
-  //public static IGeometry GetPoligone(this Building building, IGeometryFactory geometryFactory)
+  //public static IGeometry GetPoligone(this BuildingInfo buildingInfo, IGeometryFactory geometryFactory)
   //{
-  //  return OsmObjectHelper.GetByCoord(building.GetCoords())?.GetPoligone(geometryFactory);
+  //  return OsmObjectHelper.GetByCoord(buildingInfo.GetCoords())?.GetPoligone(geometryFactory);
   //}
 
   public static double? NullInsteadNan(this double? value)

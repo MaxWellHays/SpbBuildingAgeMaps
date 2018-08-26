@@ -14,6 +14,9 @@ namespace SpbBuildingAgeMaps
     private static readonly Dictionary<string, string> shortWords = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase)
     {
       {"ул.", "улица"},
+      {"ш.", "шоссе"},
+      {"кан.", "канала"},
+      {"бул.", "бульвар"},
       {"пер.", "переулок"},
       {"корп.", "корпус"},
       {"пр.", "проспект"},
@@ -24,10 +27,12 @@ namespace SpbBuildingAgeMaps
       {"наб.", "набережная"},
       {"р.", "река"},
       {"пл.", "площадь"},
+      {"литер ", "литера "},
       {"Ж. Дюкло", "Жака Дюкло"},
+      {"П.Смородина", "Петра Смородина"},
     };
 
-    private static readonly Regex shortWordsRegex = new Regex($"(^|\\s)({string.Join("|", shortWords.Keys.Select(s => s.Replace(".","\\.")))})\\s?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex shortWordsRegex = new Regex($"(^|\\s)({string.Join("|", shortWords.Keys.Select(s => s.Replace(".", "\\.")))})\\s?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static IEnumerable<string> NormalizeAddress(string address)
     {
@@ -41,8 +46,11 @@ namespace SpbBuildingAgeMaps
         int length = match.Length - match.Groups[1].Length;
         normalizeAddress = normalizeAddress.Substring(0, position) + replacement + " " + normalizeAddress.Substring(position + length);
       }
-      
+
       normalizeAddress = $"{cityName} {normalizeAddress}";
+
+      normalizeAddress = normalizeAddress.Replace(" , ", " ");
+
       yield return normalizeAddress;
 
       var literMatch = literCheckerRegex.Match(normalizeAddress);

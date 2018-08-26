@@ -2,7 +2,7 @@
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
-namespace SpbBuildingAgeMaps
+namespace SpbBuildingAgeMaps.Helpers
 {
   static class XmlHelper
   {

@@ -11,9 +11,10 @@ using System;
 namespace SpbBuildingAgeMaps.Migrations
 {
     [DbContext(typeof(BuildingContext))]
-    partial class BuildingContextModelSnapshot : ModelSnapshot
+    [Migration("20180825160620_InitialCreate")]
+    partial class InitialCreate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

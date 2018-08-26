@@ -10,6 +10,7 @@ using GeoAPI.Geometries;
 using JetBrains.Annotations;
 using NetTopologySuite.Geometries;
 using SpbBuildingAgeMaps.DataModel;
+using SpbBuildingAgeMaps.Helpers;
 
 namespace SpbBuildingAgeMaps
 {
@@ -35,8 +36,8 @@ namespace SpbBuildingAgeMaps
       for (int i = 1; i < 3; i++)
       {
         int radios = i * 10;
-        yield return interpreterUrl + $"[out:xml]; relation[\"building\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
-        yield return interpreterUrl + $"[out:xml]; way[\"building\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
+        yield return interpreterUrl + $"[out:xml]; relation[\"buildingInfo\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
+        yield return interpreterUrl + $"[out:xml]; way[\"buildingInfo\"](around:{radios},{latitude},{longitude}); out geom;".Replace(" ", "%20");
       }
     }
 

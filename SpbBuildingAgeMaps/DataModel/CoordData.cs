@@ -10,7 +10,7 @@ namespace SpbBuildingAgeMaps.DataModel
 
     public int BuildingId { get; set; }
 
-    public Building Building { get; set; }
+    public BuildingInfo BuildingInfo { get; set; }
 
     public string Source { get; set; }
 
