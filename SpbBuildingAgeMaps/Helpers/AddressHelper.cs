@@ -28,6 +28,8 @@ namespace SpbBuildingAgeMaps
       {"р.", "река"},
       {"пл.", "площадь"},
       {"литер ", "литера "},
+      {"лит.", "литера" },
+      {"д.", "дом"},
       {"Ж. Дюкло", "Жака Дюкло"},
       {"П.Смородина", "Петра Смородина"},
     };
@@ -47,7 +49,10 @@ namespace SpbBuildingAgeMaps
         normalizeAddress = normalizeAddress.Substring(0, position) + replacement + " " + normalizeAddress.Substring(position + length);
       }
 
-      normalizeAddress = $"{cityName} {normalizeAddress}";
+      if (!normalizeAddress.Contains(cityName))
+      {
+        normalizeAddress = $"{cityName} {normalizeAddress}";
+      }
 
       normalizeAddress = normalizeAddress.Replace(" , ", " ");
 

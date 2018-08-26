@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Threading;
@@ -26,7 +27,14 @@ namespace SpbBuildingAgeMaps
 			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
       //await new BuildingInfoProvider().GenerateCityDataFileAsync();
-      BuildingInfoWithLocation t = await new ReformaGhkBuidlingsProvider().ToTask();
+      ReformaGhkBuidlingsProvider reformaGhkBuidlingsProvider = new ReformaGhkBuidlingsProvider();
+      IDisposable subscription =
+        Observable.Using(() => File.Create("buildingsFromReformaGhk.txt"),
+            stream => Observable.Using(() => new StreamWriter(stream),
+              writer => reformaGhkBuidlingsProvider.Select(entry => new { entry, writer })))
+          .Subscribe(async x => await x.writer.WriteLineAsync($"{x.entry.Address} {x.entry.BuildYear} {x.entry.Coordinate}").ConfigureAwait(false));
+
+      await reformaGhkBuidlingsProvider.ToTask().ConfigureAwait(false);
     }
 
     public static async Task FillDataAsync()
