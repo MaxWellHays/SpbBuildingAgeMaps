@@ -4,13 +4,19 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Reactive;
 using System.Reactive.Subjects;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using com.LandonKey.SocksWebProxy;
+using com.LandonKey.SocksWebProxy.Proxy;
+using Flurl;
 using Flurl.Http;
+using Flurl.Http.Configuration;
 using GeoAPI.Geometries;
 using HtmlAgilityPack;
 using SpbBuildingAgeMaps.DataModel;
@@ -23,12 +29,74 @@ namespace SpbBuildingAgeMaps.DataProviders
     private const string SpbBuildingsRootPageUrl = @"https://www.reformagkh.ru/myhouse?tid=2276347";
     private const string SaveCheckDataUrl = @"https://www.reformagkh.ru/save-check-data";
     private int _numberOfLinksLeft = 1;
-    private FlurlClient _flurlClient;
+    private readonly IFlurlClient _flurlClient;
 
     public ReformaGhkBuidlingsProvider()
     {
-      _flurlClient = new FlurlClient().EnableCookies().WithHeader("User-Agent", WebHelper.UserAgent);
-      CrawlBuildingsAsync(SpbBuildingsRootPageUrl);
+      _flurlClient = new FlurlClient().EnableCookies().WithHeader("User-Agent", WebHelper.UserAgent).Configure(settings => settings.HttpClientFactory = new ProxyHttpClientFactory(GetProxy));
+      RunAsync().ConfigureAwait(false);
+    }
+
+    private async Task RunAsync()
+    {
+      if (!await CheckTorConnectionAsync().ConfigureAwait(false))
+      {
+        throw new NotImplementedException();
+      }
+      await CrawlBuildingsAsync(SpbBuildingsRootPageUrl).ConfigureAwait(false);
+    }
+
+    private async Task<bool> CheckTorConnectionAsync()
+    {
+      string response = await "https://check.torproject.org/".WithClient(_flurlClient).GetStringAsync().ConfigureAwait(false);
+      HtmlDocument htmlDocument = new HtmlDocument();
+      htmlDocument.LoadHtml(response);
+      HtmlNode h1Node = htmlDocument.DocumentNode.SelectSingleNode("//h1");
+      return h1Node.Attributes["class"].Value.Equals("not");
+    }
+
+    private IWebProxy GetProxy()
+    {
+      return new SocksWebProxy(new ProxyConfig(IPAddress.Loopback, 8118, IPAddress.Loopback, 9150, ProxyConfig.SocksVersion.Five));
+    }
+
+    private static void ChangeProxy()
+    {
+      IPEndPoint ip = new IPEndPoint(IPAddress.Loopback, 9151);
+      Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+      socket.Connect(ip);
+      socket.Send(Encoding.ASCII.GetBytes("AUTHENTICATE \"secret\"" + Environment.NewLine));
+      byte[] data = new byte[1024];
+      int receivedDataLength = socket.Receive(data);
+      string stringData = Encoding.ASCII.GetString(data, 0, receivedDataLength);
+
+      socket.Send(Encoding.UTF8.GetBytes("SIGNAL NEWNYM" + Environment.NewLine));
+      receivedDataLength = socket.Receive(data);
+      stringData = Encoding.ASCII.GetString(data, 0, receivedDataLength);
+      socket.Close();
+      if (!stringData.Contains("250"))
+      {
+        throw new NotImplementedException();
+      }
+    }
+
+    public class ProxyHttpClientFactory : DefaultHttpClientFactory
+    {
+      private readonly Func<IWebProxy> _proxyGenerator;
+
+      public ProxyHttpClientFactory(Func<IWebProxy> proxyGenerator)
+      {
+        _proxyGenerator = proxyGenerator;
+      }
+
+      public override HttpMessageHandler CreateMessageHandler()
+      {
+        return new HttpClientHandler
+        {
+          Proxy = _proxyGenerator(),
+          UseProxy = true
+        };
+      }
     }
 
     protected override IDisposable SubscribeCore(IObserver<BuildingInfoWithLocation> observer)
@@ -44,12 +112,12 @@ namespace SpbBuildingAgeMaps.DataProviders
 
       if (url.IndexOf("myhouse/profile/view", StringComparison.InvariantCultureIgnoreCase) >= 0)
       {
-        await ProcessBuildingInformationPage(htmlDocument).ConfigureAwait(false);
+        await ProcessBuildingInformationPageAsync(htmlDocument).ConfigureAwait(false);
       }
       else
       {
-        bool b = await ProcessNeighborhoodListPage(htmlDocument).ConfigureAwait(false)
-          || await ProcessBuildingListPage(htmlDocument, url).ConfigureAwait(false);
+        bool b = await ProcessNeighborhoodListPageAsync(htmlDocument).ConfigureAwait(false)
+          || await ProcessBuildingListPageAsync(htmlDocument, url).ConfigureAwait(false);
       }
 
       if (Interlocked.Decrement(ref _numberOfLinksLeft) <= 0)
@@ -58,7 +126,7 @@ namespace SpbBuildingAgeMaps.DataProviders
       }
     }
 
-    private async Task<bool> ProcessNeighborhoodListPage(HtmlDocument htmlDocument)
+    private async Task<bool> ProcessNeighborhoodListPageAsync(HtmlDocument htmlDocument)
     {
       IEnumerable<string> links =
         (htmlDocument.DocumentNode.SelectNodes("//a[@class='georefs']") ?? Enumerable.Empty<HtmlNode>())
@@ -76,7 +144,7 @@ namespace SpbBuildingAgeMaps.DataProviders
       return false;
     }
 
-    private async Task<bool> ProcessBuildingListPage(HtmlDocument htmlDocument, string url)
+    private async Task<bool> ProcessBuildingListPageAsync(HtmlDocument htmlDocument, Url url)
     {
       List<string> buildingsUrl =
         (htmlDocument.DocumentNode.SelectNodes("//div[@class='grid']//tr/td/a[@href]") ?? Enumerable.Empty<HtmlNode>())
@@ -90,13 +158,10 @@ namespace SpbBuildingAgeMaps.DataProviders
           await AddUrlToQueueAsync("https://www.reformagkh.ru" + building).ConfigureAwait(false);
         }
 
-        Uri uri = new Uri(url);
-        NameValueCollection query = HttpUtility.ParseQueryString(uri.Query);
-
-        string pageValue = query.Get("page");
+        string pageValue = url.QueryParams["page"]?.ToString();
         if (!string.IsNullOrEmpty(pageValue) && int.TryParse(pageValue, out int currentPage))
         {
-          await AddUrlToQueueAsync(uri.SetParameter("page", (currentPage + 1).ToString()).ToString()).ConfigureAwait(false);
+          await AddUrlToQueueAsync(url.SetQueryParam("page", (currentPage + 1).ToString()).ToString()).ConfigureAwait(false);
         }
         else
         {
@@ -108,7 +173,7 @@ namespace SpbBuildingAgeMaps.DataProviders
       return false;
     }
 
-    private async Task<bool> ProcessBuildingInformationPage(HtmlDocument htmlDocument)
+    private async Task<bool> ProcessBuildingInformationPageAsync(HtmlDocument htmlDocument)
     {
       List<HtmlNode> houseInfoRows = (htmlDocument.DocumentNode.SelectNodes("//section[contains(@class, 'house_info')]//table[@class='col_list']//tr") ?? Enumerable.Empty<HtmlNode>()).ToList();
       if (houseInfoRows.Any())
@@ -158,7 +223,7 @@ namespace SpbBuildingAgeMaps.DataProviders
           throw new NotImplementedException();
         }
 
-        string rawAddress = WebUtility.HtmlDecode(addressNode.InnerText.Trim());
+        string rawAddress = WebUtility.HtmlDecode(addressNode.ChildNodes[0].InnerText.Trim());
         string normalAddress = AddressHelper.NormalizeAddress(rawAddress).First();
 
         _subject.OnNext(new BuildingInfoWithLocation { Address = normalAddress, BuildYear = buildYear, Coordinate = new Coordinate(xCord, yCord) });
@@ -171,7 +236,6 @@ namespace SpbBuildingAgeMaps.DataProviders
     private async Task AddUrlToQueueAsync(string url)
     {
       Interlocked.Increment(ref _numberOfLinksLeft);
-      await Task.Delay(200).ConfigureAwait(false);
       await CrawlBuildingsAsync(url).ConfigureAwait(false);
     }
 
@@ -186,22 +250,36 @@ namespace SpbBuildingAgeMaps.DataProviders
       Console.WriteLine(url);
       while (true)
       {
-        HttpResponseMessage httpResponseMessage = await url.WithClient(_flurlClient).GetAsync().ConfigureAwait(false);
-        string content = await httpResponseMessage.Content.ReadAsStringAsync().ConfigureAwait(false);
-        if (content.StartsWith(@"<script lang=""text/javascript"">"))
+        string content = null;
+        try
         {
-          if (!GetSecureKeys(content, out var keys))
+          HttpResponseMessage httpResponseMessage = await url.WithClient(_flurlClient).GetAsync().ConfigureAwait(false);
+          content = await httpResponseMessage.Content.ReadAsStringAsync().ConfigureAwait(false);
+          if (content.StartsWith(@"<script lang=""text/javascript"">"))
           {
+            if (!GetSecureKeys(content, out var keys))
+            {
+              continue;
+            }
+            string secureResponse = $"key1={keys.key1}&key2={keys.key2}&check-key={keys.checkKey}&check-value={keys.val1 + keys.val2}";
+            HttpResponseMessage responseMessage = await SaveCheckDataUrl.WithClient(_flurlClient)
+              .WithHeader("X-Requested-With", "XMLHttpRequest")
+              .WithHeader("Content-Type", "application/x-www-form-urlencoded")
+              .PostAsync(new StringContent(secureResponse)).ConfigureAwait(false);
+            string responseContent = await responseMessage.Content.ReadAsStringAsync().ConfigureAwait(false);
             continue;
           }
-          string secureResponse = $"key1={keys.key1}&key2={keys.key2}&check-key={keys.checkKey}&check-value={keys.val1 + keys.val2}";
-          HttpResponseMessage responseMessage = await SaveCheckDataUrl.WithClient(_flurlClient)
-            .WithHeader("X-Requested-With", "XMLHttpRequest")
-            .WithHeader("Content-Type", "application/x-www-form-urlencoded")
-            .PostAsync(new StringContent(secureResponse)).ConfigureAwait(false);
-          string responseContent = await responseMessage.Content.ReadAsStringAsync().ConfigureAwait(false);
-          continue;
         }
+        catch (FlurlHttpException exception)
+        {
+          if (exception.Call.Response.StatusCode == HttpStatusCode.Forbidden)
+          {
+            ChangeProxy();
+            continue;
+          }
+          throw;
+        }
+
 
         HtmlDocument htmlDocument = new HtmlDocument();
         htmlDocument.LoadHtml(content);

@@ -32,7 +32,12 @@ namespace SpbBuildingAgeMaps
         Observable.Using(() => File.Create("buildingsFromReformaGhk.txt"),
             stream => Observable.Using(() => new StreamWriter(stream),
               writer => reformaGhkBuidlingsProvider.Select(entry => new { entry, writer })))
-          .Subscribe(async x => await x.writer.WriteLineAsync($"{x.entry.Address} {x.entry.BuildYear} {x.entry.Coordinate}").ConfigureAwait(false));
+          .Subscribe(async x =>
+          {
+            string buildingInfo = $"{x.entry.Address} {x.entry.BuildYear} {x.entry.Coordinate}";
+            await x.writer.WriteLineAsync(buildingInfo).ConfigureAwait(false);
+            Console.WriteLine(buildingInfo);
+          });
 
       await reformaGhkBuidlingsProvider.ToTask().ConfigureAwait(false);
     }
